@@ -856,16 +856,33 @@ def race_weather(nr):
             "days_out": nr["days_out"], "forecast": fc, "adjustments": adj}
 
 
+# series that drive taper / "next race" prep (his priority XC racing). Short track
+# is a weekly summer series he does on the side, so it shows on the calendar but
+# does not hijack the taper logic.
+PRIORITY_SERIES = {"DINO", "NICA"}
+
+
 def next_race(excluded=None):
     excluded = set(excluded or [])
     t = date.today().isoformat()
     upcoming = [r for r in RACE_CALENDAR
-                if r[0] >= t and f"{r[0]}|{r[1]}" not in excluded]
+                if r[0] >= t and r[2] in PRIORITY_SERIES and f"{r[0]}|{r[1]}" not in excluded]
     if not upcoming:
         return None
     d, name, series = upcoming[0]
     days = (datetime.fromisoformat(d).date() - date.today()).days
     return {"date": d, "name": name, "series": series, "days_out": days}
+
+
+def short_track_races(config):
+    """User-listed short-track dates from config: ["2026-06-24", "2026-07-08|Cycloplex STXC"]."""
+    out = []
+    for entry in config.get("short_track_races", []):
+        parts = str(entry).split("|")
+        d = parts[0].strip()
+        name = parts[1].strip() if len(parts) > 1 else "Cycloplex Short Track"
+        out.append((d, name, "Short Track"))
+    return out
 
 
 def coaching_brief(pmc_series, ready, ftp, ftp_info, tiz, recovery, excluded=None):
@@ -1212,14 +1229,6 @@ def synthesize(pmc_series, models, recovery, ftp, ftp_info, tiz, nr, weight, doe
                                if heavy else
                                f"Every pound off the bike saves ~{clp['sec_per_lb_per_100ft']}s per 100 ft climbed.")})
 
-    # 7.8) Short track: his best-fit discipline
-    if does_short_track and cp and vi.get("season_median"):
-        st_w = cp["predict"].get("short_track_25min")
-        out.append({"title": "Short track is his event", "tone": "good",
-                    "text": f"Short track (~20-30 min, all-out, constant surges) rewards exactly what he has: a {cp['w_prime_kj']} kJ anaerobic battery, strong 5-min power, and a punchy riding style (VI {vi['season_median']}). "
-                            f"The CP model says he can hold about {st_w} W for a 25-min short track - higher than his longer-XC number, because the shorter the race the more of that battery he can spend. "
-                            "Race it aggressively: fight for a front-row start, go hard off the line for clear air, then surge every rise and sprint each corner exit - repeatability is the weapon."})
-
     # 8) Race outlook: TSB + days to race + recovery + CP prediction
     if nr and cp:
         d = nr["days_out"]
@@ -1389,7 +1398,8 @@ def main():
         "insights": insights,
         "race_weather": weather_block,
         "fueling": fuel,
-        "race_calendar": [{"date": d, "name": n, "series": s} for d, n, s in RACE_CALENDAR],
+        "race_calendar": [{"date": d, "name": n, "series": s}
+                          for d, n, s in sorted(RACE_CALENDAR + short_track_races(config))],
         "excluded_races": excluded,
         "race_intel": load_riders(),
         "rides": ride_list,

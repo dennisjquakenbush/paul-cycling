@@ -100,9 +100,11 @@
   /* ---- static Indiana race calendar (from PAUL_DATA, falls back to constant) ---- */
   const RACES = (D.race_calendar && D.race_calendar.length) ? D.race_calendar.map(r => ({ name: r.name, date: r.date, series: r.series })) : [];
   const raceKey = (r) => `${r.date}|${r.name}`;
+  const PRIORITY = new Set(["DINO", "NICA"]);        // drive next-race + taper; short track doesn't
   let excluded = new Set(D.excluded_races || []);   // updated live from /api/config
 
-  const upcoming = () => RACES.filter(r => r.date >= today && !excluded.has(raceKey(r))).sort((a, b) => a.date < b.date ? -1 : 1);
+  // "next race" and taper only consider his priority XC racing
+  const upcoming = () => RACES.filter(r => r.date >= today && PRIORITY.has(r.series) && !excluded.has(raceKey(r))).sort((a, b) => a.date < b.date ? -1 : 1);
 
   /* ================= header ================= */
   const p = D.profile;
@@ -424,9 +426,9 @@
     if (cp) {
       const note = el("div", "note");
       const conf = cp.r2 != null ? `The model fits his efforts at R&sup2;=${cp.r2} (1.0 is perfect).` : "";
-      const st = cp.predict['short_track_25min'] ? ` <strong>${cp.predict['short_track_25min']} W</strong> for a 25-min short track,` : "";
+      const st = cp.predict['short_track_25min'] ? ` (and about ${cp.predict['short_track_25min']} W for a 25-min short track)` : "";
       note.innerHTML = `Critical Power is <strong style="color:var(--accent)">${cp.cp} W (${cp.cp_wkg} W/kg)</strong> with a W' of ${cp.w_prime_kj} kJ. ${conf} ` +
-        `From this model he can sustain about${st} <strong>${cp.predict['45min']} W</strong> for a 45-min XC race and <strong>${cp.predict['75min']} W</strong> for 75 min.`;
+        `From this model he can sustain about <strong>${cp.predict['45min']} W</strong> for a 45-min XC race and <strong>${cp.predict['75min']} W</strong> for 75 min${st}.`;
       s.appendChild(note);
     }
     if (ms && ms.high_risk) {

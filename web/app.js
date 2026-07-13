@@ -686,7 +686,12 @@
       const typ = r.type === "road_biking" ? "road" : (r.type === "mountain_biking" ? "mtb" : r.type.replace("_", " "));
       const tc = r.type === "road_biking" ? "road" : "";
       const dec = r.decoupling == null ? "-" : `${r.decoupling}%`;
-      const decColor = r.decoupling != null && r.decoupling > 5 ? "color:var(--amber)" : "";
+      let decColor = "";
+      if (r.decoupling != null) {
+        if (r.decoupling < 0) decColor = "color:var(--green);font-weight:700";        // got more efficient - best
+        else if (r.decoupling <= 5) decColor = "color:var(--amber)";                  // mild drift - ok
+        else decColor = "color:var(--red);font-weight:700";                            // faded - watch
+      }
       tr.innerHTML = `<td>${r.date.slice(5)}</td>
         <td>${(r.name || "").slice(0, MOBILE ? 16 : 26)}</td>
         <td><span class="tag ${tc}">${typ}</span></td>

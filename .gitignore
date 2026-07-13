@@ -1,0 +1,17 @@
+# Garmin OAuth tokens live in ~/.garminconnect (outside this repo) - never copy them in.
+
+# Raw pulls, computed analysis, and logs - large and detailed. The hosted dashboard
+# only needs web/data.js, which is committed separately.
+/data/*
+!/data/riders.json
+
+# Apple Health exports (personal health data) - never commit.
+/apple_health/*
+!/apple_health/.gitkeep
+
+# macOS launchd runtime logs
+*.log
+
+__pycache__/
+*.pyc
+.DS_Store

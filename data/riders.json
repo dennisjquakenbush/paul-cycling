@@ -1,0 +1,33 @@
+{
+  "updated": "2026-07-13",
+  "category": "DINO Sport Men - age bracket 11-18 (the full Sport class, not the easier Junior category)",
+  "confidence_note": "Based on official DINO result fields. Paul has only ONE verified 2026 race (Winona Lake), so rivals are provisional until he races more rounds. Upcoming registration lists and his NICA category could not be accessed (both gated).",
+  "results": [
+    {"race": "Winona Lake", "date": "2026-05-16", "place": "17th of 41 overall / 5th in 11-18", "time": "1:47:31", "confidence": "high"},
+    {"race": "Brown County / Potato Creek / Muscatatuck", "date": "", "place": "Not in Sport Men results", "time": "", "confidence": "high"}
+  ],
+  "garmin_flag": "His Garmin shows rides at Potato Creek (Jun 21) and Muscatatuck (Jul 12) on race days, but he is not in the Sport Men results those days. He likely pre-rode the course or raced a different category - worth confirming which races he is actually entering.",
+  "chase": [
+    {"name": "Brooks Graves", "detail": "Nearest junior ahead at Winona (8th, +4:40). The key age-group target.", "gap": "+4:40"},
+    {"name": "Eric Zimmerman", "detail": "13th at Winona (+1:56) and races most rounds - a recurring benchmark to measure against.", "gap": "+1:56"},
+    {"name": "Kerry Beber", "detail": "The literal next wheel at Winona (16th, +0:56). Realistic to hold onto.", "gap": "+0:56"},
+    {"name": "Topher Dolinski", "detail": "Age-group rival (14) just ahead, 1:41:50.", "gap": "~+6:00"}
+  ],
+  "peers": [
+    {"name": "William Hoffman", "detail": "14, Indianapolis. Finished just behind Paul at Winona (+2:25) and races every round - a reliable close training/racing peer."},
+    {"name": "Owen Hoffman", "detail": "14, Indianapolis. Hoffman brothers race every DINO round together - steady regular partners."},
+    {"name": "Harrison Lapish", "detail": "16-17, Indianapolis. Races nearly every round at a similar-to-slightly-slower pace - a good recurring measuring stick."}
+  ],
+  "aspirational": [
+    {"name": "Wyatt Romine", "detail": "15, Warsaw. WON Winona Sport Men outright (1:36:33). Elite - a long-term target."},
+    {"name": "Jackson Strutz", "detail": "17, Carmel. 2nd at Winona. Very strong."},
+    {"name": "Vinson Senefeld", "detail": "16, Whitestown. Leads DINO Junior 15-18 standings."}
+  ],
+  "upcoming": "Registration entry lists for Southwestway Park (Aug 16, DINO) and the Stoney Run NICA opener (Aug 29-30) are not public - both are behind logins. Check the start lists the week of each race.",
+  "nica": "Indiana NICA races by grade + ability: Middle School -> Freshman -> Sophomore -> JV -> Varsity, with mid-season upgrades for top finishers. At 16 with his Sport-level speed, Paul is likely a Sophomore or upgraded JV rider - but his exact NICA category could not be verified (the NICA results site was blocked).",
+  "sources": [
+    "https://runsignup.com/Series/dinomtbseriessportmen",
+    "https://runsignup.com/Race/Results/177646",
+    "https://indianamtb.org/race-series/"
+  ]
+}

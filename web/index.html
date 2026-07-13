@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Paul Quakenbush - Cycling Dashboard</title>
+<meta name="theme-color" content="#e5348e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="favicon.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Paul MTB">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark"></span>
+      <div>
+        <h1>Paul Quakenbush</h1>
+        <p id="subhead">Mountain bike racer - DINO &amp; Indiana NICA</p>
+      </div>
+    </div>
+    <div class="stamp" id="stamp"></div>
+  </header>
+
+  <main>
+    <section id="readiness" class="card wide"></section>
+
+    <section id="coaching" class="card wide"></section>
+
+    <div class="grid">
+      <section id="fitness" class="card"></section>
+      <section id="nextrace" class="card"></section>
+    </div>
+
+    <section id="powercurve" class="card wide"></section>
+
+    <section id="load" class="card wide"></section>
+
+    <div class="grid">
+      <section id="zones" class="card"></section>
+      <section id="weekly" class="card"></section>
+    </div>
+
+    <section id="recovery" class="card wide"></section>
+
+    <section id="fueling" class="card wide"></section>
+
+    <section id="races" class="card wide"></section>
+
+    <section id="riders" class="card wide"></section>
+
+    <section id="rides" class="card wide"></section>
+
+    <footer id="quality"></footer>
+  </main>
+</div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  }
+</script>
+</body>
+</html>

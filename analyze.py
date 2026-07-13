@@ -690,21 +690,21 @@ def readiness(pmc_series, recovery):
     if len(pmc_series) > 7:
         ramp = round(ctl - pmc_series[-8]["ctl"], 1)
 
-    why, actions, verdict = [], [], "normal"
+    why, actions, verdict = [], [], "On track"
     if tsb <= -25:
-        verdict = "dig-a-hole territory"
-        why.append(f"Form (TSB) is very negative at {tsb}.")
-        actions.append("Take 1-2 genuine easy/rest days now.")
+        verdict = "Needs recovery"
+        why.append(f"He's carrying a lot of fatigue right now (form {tsb}) - normal right after a hard race, but it means he's not fresh.")
+        actions.append("Take 1-2 genuine easy or rest days now.")
     elif tsb < -10:
-        verdict = "fatigued"
-        why.append(f"Carrying fatigue (TSB {tsb}).")
+        verdict = "Tired"
+        why.append(f"Carrying some fatigue (form {tsb}) - a bit run down but not deep in the red.")
         actions.append("Keep the next hard day short; prioritise sleep.")
     elif tsb > 15:
-        verdict = "fresh"
-        why.append(f"Well rested (TSB {tsb}).")
+        verdict = "Fresh"
+        why.append(f"Well rested and fresh (form {tsb}).")
         actions.append("Good window for a hard session or a race.")
     else:
-        why.append(f"Balanced form (TSB {tsb}).")
+        why.append(f"Training load and freshness are in balance (form {tsb}).")
 
     if ramp is not None and ramp > RAMP_WARN:
         why.append(f"Fitness is ramping fast (+{ramp} CTL/wk) - above the junior-safe ~{RAMP_WARN}.")
@@ -714,8 +714,8 @@ def readiness(pmc_series, recovery):
     rec = recovery or {}
     if rec.get("rhr_trend") and rec["rhr_trend"] >= 3:
         why.append(f"Resting HR is trending up (+{rec['rhr_trend']} bpm) - a fatigue signal.")
-        if verdict in ("normal", "fresh"):
-            verdict = "watch recovery"
+        if verdict in ("On track", "Fresh"):
+            verdict = "Watch recovery"
         actions.append("Back off if resting HR stays elevated.")
     if rec.get("hrv_trend") and rec["hrv_trend"] <= -5:
         why.append(f"HRV is down ({rec['hrv_trend']}) vs baseline.")

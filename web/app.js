@@ -170,8 +170,8 @@
   /* ================= readiness ================= */
   (function () {
     const r = D.readiness, s = $("readiness");
-    const vClass = { "fresh": "fresh", "normal": "normal", "watch recovery": "watch",
-      "fatigued": "fatigued", "dig-a-hole territory": "dig", "unknown": "" }[r.verdict] || "normal";
+    const vClass = { "Fresh": "fresh", "On track": "normal", "Watch recovery": "watch",
+      "Tired": "fatigued", "Needs recovery": "dig", "unknown": "" }[r.verdict] || "normal";
     s.appendChild(header("readiness", "Readiness <span class='sub'>&mdash; today at a glance</span>"));
     const head = el("div", "ready-head");
     head.appendChild(el("div", "verdict " + vClass, r.verdict));

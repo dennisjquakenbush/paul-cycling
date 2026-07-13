@@ -15,6 +15,12 @@
   const feet = (m) => (m == null ? null : m * 3.28084);
   const lbs = (kg) => (kg == null ? null : kg * 2.20462);
 
+  /* phone detection - drives bigger chart fonts and simpler labels */
+  const MOBILE = window.matchMedia("(max-width: 640px)").matches;
+  const AX = MOBILE ? 22 : 10;   // axis-label font size (SVG user units)
+  const VL = MOBILE ? 25 : 11;   // value-label font size
+  const SW = MOBILE ? 4 : 2.5;   // line stroke width
+
   /* ---- plain-English glossary shown in hover tooltips ---- */
   const GLOSSARY = {
     readiness: "A quick verdict on how fresh Paul is today, from his form (TSB) and recovery signals.",
@@ -45,8 +51,17 @@
     const t = GLOSSARY[key]; if (!t) return null;
     const s = el("span", "tip", "?");
     s.appendChild(el("span", "tt", t));
+    // tap to toggle on touch devices (hover does not exist there)
+    s.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const open = s.classList.contains("open");
+      document.querySelectorAll(".tip.open").forEach(x => x.classList.remove("open"));
+      if (!open) s.classList.add("open");
+    });
     return s;
   };
+  document.addEventListener("click", () =>
+    document.querySelectorAll(".tip.open").forEach(x => x.classList.remove("open")));
   const header = (key, html) => { const h = el("h2", null, html); const t = tip(key); if (t) h.appendChild(t); return h; };
 
   /* ---- static Indiana race calendar (from PAUL_DATA, falls back to constant) ---- */
@@ -143,15 +158,17 @@
     s.appendChild(header("powercurve", "Power curve <span class='sub'>&mdash; best efforts across the season</span>"));
     const data = D.power_curve.filter(d => d.watts);
     if (!data.length) { s.appendChild(el("div", "note", "No power data.")); return; }
-    const W = 1000, H = 320, PL = 46, PR = 46, PT = 16, PB = 40;
+    const W = 1000, H = MOBILE ? 460 : 320;
+    const PL = MOBILE ? 60 : 46, PR = MOBILE ? 30 : 46;
+    const PT = MOBILE ? 40 : 16, PB = MOBILE ? 54 : 40;
     const g = svg(W, H);
     const maxW = Math.max(...data.map(d => d.watts));
     const x = i => PL + (i / (data.length - 1)) * (W - PL - PR);
-    const y = w => PT + (1 - w / (maxW * 1.05)) * (H - PT - PB);
+    const y = w => PT + (1 - w / (maxW * 1.08)) * (H - PT - PB);
     for (let k = 0; k <= 4; k++) {
       const wv = maxW * 1.05 * k / 4;
       g.appendChild(node("line", { x1: PL, x2: W - PR, y1: y(wv), y2: y(wv), class: "gridline" }));
-      g.appendChild(node("text", { x: PL - 8, y: y(wv) + 3, class: "axis-txt", "text-anchor": "end" }, Math.round(wv)));
+      g.appendChild(node("text", { x: PL - 8, y: y(wv) + AX * 0.35, "text-anchor": "end", fill: "var(--muted)", "font-size": AX }, Math.round(wv)));
     }
     let dpath = "", apath = `M ${x(0)} ${y(0)}`;
     data.forEach((d, i) => { const cmd = i ? "L" : "M"; dpath += `${cmd} ${x(i)} ${y(d.watts)} `; apath += `L ${x(i)} ${y(d.watts)} `; });
@@ -161,12 +178,13 @@
     grad.appendChild(node("stop", { offset: "100%", "stop-color": "var(--accent)", "stop-opacity": 0 }));
     const defs = node("defs", {}); defs.appendChild(grad); g.appendChild(defs);
     g.appendChild(node("path", { d: apath, fill: "url(#pcg)" }));
-    g.appendChild(node("path", { d: dpath, fill: "none", stroke: "var(--accent)", "stroke-width": 2.5 }));
+    g.appendChild(node("path", { d: dpath, fill: "none", stroke: "var(--accent)", "stroke-width": SW }));
     data.forEach((d, i) => {
-      g.appendChild(node("circle", { cx: x(i), cy: y(d.watts), r: 4, fill: "var(--accent)", stroke: "var(--bg)", "stroke-width": 2 }));
-      g.appendChild(node("text", { x: x(i), y: y(d.watts) - 12, class: "axis-txt", "text-anchor": "middle", fill: "var(--text)", "font-size": 11 }, `${Math.round(d.watts)}w`));
-      g.appendChild(node("text", { x: x(i), y: y(d.watts) - 24, class: "axis-txt", "text-anchor": "middle" }, `${fmt(d.wkg, 1)} w/kg`));
-      g.appendChild(node("text", { x: x(i), y: H - PB + 18, class: "axis-txt", "text-anchor": "middle", fill: "var(--text)" }, d.label));
+      g.appendChild(node("circle", { cx: x(i), cy: y(d.watts), r: MOBILE ? 6 : 4, fill: "var(--accent)", stroke: "#fff", "stroke-width": 2 }));
+      g.appendChild(node("text", { x: x(i), y: y(d.watts) - (MOBILE ? 16 : 12), "text-anchor": "middle", fill: "var(--text)", "font-size": VL, "font-weight": 700 }, `${Math.round(d.watts)}w`));
+      // w/kg second line only on desktop (keeps the phone chart uncluttered)
+      if (!MOBILE) g.appendChild(node("text", { x: x(i), y: y(d.watts) - 24, "text-anchor": "middle", fill: "var(--muted)", "font-size": 10 }, `${fmt(d.wkg, 1)} w/kg`));
+      g.appendChild(node("text", { x: x(i), y: H - PB + (MOBILE ? 32 : 18), "text-anchor": "middle", fill: "var(--text)", "font-size": AX }, d.label));
     });
     s.appendChild(g);
   })();
@@ -177,7 +195,8 @@
     s.appendChild(header("load", "Training load <span class='sub'>&mdash; Fitness (CTL), Fatigue (ATL) and Form (TSB)</span>"));
     const pmc = D.pmc;
     if (!pmc.length) return;
-    const W = 1000, H = 300, PL = 40, PR = 40, PT = 14, PB = 34;
+    const W = 1000, H = MOBILE ? 360 : 300;
+    const PL = MOBILE ? 54 : 40, PR = 40, PT = 14, PB = MOBILE ? 44 : 34;
     const g = svg(W, H);
     const n = pmc.length;
     const maxV = Math.max(...pmc.map(d => Math.max(d.ctl, d.atl))) * 1.1;
@@ -188,17 +207,20 @@
     const yT = v => PT + (H - PT - PB) / 2 - (v / tspan) * ((H - PT - PB) / 2);
     for (let k = 0; k <= 4; k++) { const vv = maxV * k / 4;
       g.appendChild(node("line", { x1: PL, x2: W - PR, y1: y(vv), y2: y(vv), class: "gridline" }));
-      g.appendChild(node("text", { x: PL - 6, y: y(vv) + 3, class: "axis-txt", "text-anchor": "end" }, Math.round(vv))); }
+      g.appendChild(node("text", { x: PL - 6, y: y(vv) + AX * 0.35, "text-anchor": "end", fill: "var(--muted)", "font-size": AX }, Math.round(vv))); }
     const line = (key, color, w) => { let d = ""; pmc.forEach((pt, i) => d += `${i ? "L" : "M"} ${x(i)} ${y(pt[key])} `);
       g.appendChild(node("path", { d, fill: "none", stroke: color, "stroke-width": w })); };
     pmc.forEach((pt, i) => { if (i % 2) return; const yy = yT(pt.tsb), y0 = yT(0);
-      g.appendChild(node("line", { x1: x(i), x2: x(i), y1: y0, y2: yy, stroke: pt.tsb >= 0 ? "var(--green)" : "var(--pink)", "stroke-width": 1, opacity: .25 })); });
-    line("ctl", "var(--blue)", 2.5);
-    line("atl", "var(--pink)", 1.8);
-    let lastM = "";
+      g.appendChild(node("line", { x1: x(i), x2: x(i), y1: y0, y2: yy, stroke: pt.tsb >= 0 ? "var(--green)" : "var(--pink)", "stroke-width": MOBILE ? 2 : 1, opacity: .25 })); });
+    line("ctl", "var(--blue)", MOBILE ? 3.5 : 2.5);
+    line("atl", "var(--pink)", MOBILE ? 2.6 : 1.8);
+    // month ticks - every other month on mobile to avoid crowding
+    let lastM = "", monthIdx = 0;
     pmc.forEach((pt, i) => { const mo = pt.date.slice(0, 7); if (mo !== lastM) { lastM = mo;
-      g.appendChild(node("text", { x: x(i), y: H - 8, class: "axis-txt", "text-anchor": "middle" },
-        new Date(pt.date + "T00:00").toLocaleDateString(undefined, { month: "short" }))); } });
+      if (!MOBILE || monthIdx % 2 === 0)
+        g.appendChild(node("text", { x: x(i), y: H - 8, "text-anchor": "middle", fill: "var(--muted)", "font-size": AX },
+          new Date(pt.date + "T00:00").toLocaleDateString(undefined, { month: "short" })));
+      monthIdx++; } });
     s.appendChild(g);
     s.appendChild(el("div", "legend",
       `<span><i style="background:var(--blue)"></i>Fitness (CTL)</span>
@@ -234,20 +256,22 @@
   (function () {
     const s = $("weekly");
     s.appendChild(header("weekly", "Weekly load <span class='sub'>&mdash; TSS per week</span>"));
-    const wk = D.weekly_tss.slice(-16);
+    const wk = D.weekly_tss.slice(MOBILE ? -12 : -16);
     if (!wk.length) return;
-    const W = 480, H = 220, PL = 30, PR = 10, PT = 12, PB = 40;
+    const W = 480, H = MOBILE ? 260 : 220;
+    const PL = MOBILE ? 40 : 30, PR = 10, PT = 12, PB = MOBILE ? 46 : 40;
     const g = svg(W, H);
+    const axf = MOBILE ? 15 : 10;   // this chart's viewBox is narrower, so smaller units
     const maxV = Math.max(...wk.map(d => d.tss), 1);
     const bw = (W - PL - PR) / wk.length * .68;
     const x = i => PL + (i + .5) / wk.length * (W - PL - PR);
     const y = v => PT + (1 - v / (maxV * 1.1)) * (H - PT - PB);
     for (let k = 0; k <= 3; k++) { const vv = maxV * 1.1 * k / 3;
       g.appendChild(node("line", { x1: PL, x2: W - PR, y1: y(vv), y2: y(vv), class: "gridline" }));
-      g.appendChild(node("text", { x: PL - 5, y: y(vv) + 3, class: "axis-txt", "text-anchor": "end" }, Math.round(vv))); }
+      g.appendChild(node("text", { x: PL - 5, y: y(vv) + axf * 0.35, "text-anchor": "end", fill: "var(--muted)", "font-size": axf }, Math.round(vv))); }
     wk.forEach((d, i) => {
       g.appendChild(node("rect", { x: x(i) - bw / 2, y: y(d.tss), width: bw, height: y(0) - y(d.tss), rx: 3, fill: "var(--accent)", opacity: .85 }));
-      if (i % 2 === 0) g.appendChild(node("text", { x: x(i), y: H - 8, class: "axis-txt", "text-anchor": "middle" },
+      if (i % (MOBILE ? 3 : 2) === 0) g.appendChild(node("text", { x: x(i), y: H - 8, "text-anchor": "middle", fill: "var(--muted)", "font-size": axf },
         new Date(d.week + "T00:00").toLocaleDateString(undefined, { month: "numeric", day: "numeric" })));
     });
     s.appendChild(g);
@@ -441,7 +465,11 @@
     s.appendChild(header("np", "Recent rides <span class='sub'>&mdash; last 12</span>"));
     const rows = D.rides.slice(0, 12);
     const t = el("table");
-    t.innerHTML = `<thead><tr><th>Date</th><th>Ride</th><th>Type</th><th>Dur</th><th>mi</th><th>Elev</th><th>NP</th><th>Avg HR</th><th>TSS</th><th>Decouple</th></tr></thead>`;
+    // .col-hide-sm columns are hidden on phones to keep the essentials readable
+    t.innerHTML = `<thead><tr><th>Date</th><th>Ride</th><th>Type</th>
+      <th class="col-hide-sm">Dur</th><th>mi</th><th class="col-hide-sm">Elev</th>
+      <th>NP</th><th class="col-hide-sm">Avg HR</th><th>TSS</th>
+      <th class="col-hide-sm">Decouple</th></tr></thead>`;
     const tb = el("tbody");
     rows.forEach(r => {
       const tr = el("tr");
@@ -451,16 +479,18 @@
       const dec = r.decoupling == null ? "-" : `${r.decoupling}%`;
       const decColor = r.decoupling != null && r.decoupling > 5 ? "color:var(--amber)" : "";
       tr.innerHTML = `<td>${r.date.slice(5)}</td>
-        <td>${(r.name || "").slice(0, 26)}</td>
+        <td>${(r.name || "").slice(0, MOBILE ? 16 : 26)}</td>
         <td><span class="tag ${tc}">${typ}</span></td>
-        <td>${mins}m</td><td>${fmt(miles(r.distance_km), 1)}</td><td>${Math.round(feet(r.elev_gain_m))} ft</td>
+        <td class="col-hide-sm">${mins}m</td><td>${fmt(miles(r.distance_km), 1)}</td>
+        <td class="col-hide-sm">${Math.round(feet(r.elev_gain_m))} ft</td>
         <td>${r.np == null ? "-" : Math.round(r.np)}</td>
-        <td>${r.avg_hr || "-"}</td><td>${fmt(r.tss, 0)}</td>
-        <td style="${decColor}">${dec}</td>`;
+        <td class="col-hide-sm">${r.avg_hr || "-"}</td><td>${fmt(r.tss, 0)}</td>
+        <td class="col-hide-sm" style="${decColor}">${dec}</td>`;
       tb.appendChild(tr);
     });
     t.appendChild(tb);
-    s.appendChild(t);
+    const wrap = el("div", "tbl-wrap"); wrap.appendChild(t);
+    s.appendChild(wrap);
   })();
 
   /* ================= quality footer ================= */

@@ -149,7 +149,7 @@ svg { display: block; width: 100%; height: auto; overflow: visible; }
   opacity: 0; visibility: hidden; transition: opacity .12s; z-index: 30; pointer-events: none; }
 .tip .tt::after { content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
   border: 6px solid transparent; border-top-color: #fff; }
-.tip:hover .tt { opacity: 1; visibility: visible; }
+.tip:hover .tt, .tip.open .tt { opacity: 1; visibility: visible; }
 
 /* race toggles */
 .race-toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
@@ -190,3 +190,44 @@ svg { display: block; width: 100%; height: auto; overflow: visible; }
 
 footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 8px; line-height: 1.7; }
 footer a { color: var(--accent); }
+
+/* horizontal-scroll wrapper so wide tables never break the layout */
+.tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* ---------------- phone optimizations ---------------- */
+@media (max-width: 640px) {
+  body { font-size: 16px; }
+  #app { padding: 16px 12px 48px; }
+  .card { padding: 16px 14px; border-radius: 14px; margin-bottom: 14px; }
+  .topbar { margin-bottom: 16px; }
+  h1 { font-size: 20px; }
+  .stamp { font-size: 11px; }
+
+  h2 { font-size: 13px; letter-spacing: .04em; flex-wrap: wrap; }
+  h2 .sub { display: block; margin: 3px 0 0; width: 100%; font-size: 12px; }
+
+  .verdict { font-size: 26px; }
+  .ready-metrics { gap: 14px 22px; }
+  .metric .n { font-size: 26px; }
+  .metric .l, .stat .l, .note, .reasons li { font-size: 14px; }
+  .stat .n { font-size: 24px; }
+  .actions li, .fuel-card p, .fuel-card li, .rider .rd { font-size: 14px; }
+
+  /* bigger, tap-friendly info icons */
+  .tip { width: 20px; height: 20px; font-size: 12px; }
+  .tip .tt { width: 240px; font-size: 13px; padding: 11px 13px; }
+
+  /* stat grids: keep two up but roomy */
+  .stats { gap: 10px; }
+  .stat { padding: 12px; }
+
+  /* rides table: drop lower-priority columns, keep it readable */
+  table { font-size: 14px; }
+  th, td { padding: 8px 6px; }
+  .col-hide-sm { display: none; }
+
+  /* race rows a touch taller for tapping the toggles */
+  .switch { width: 44px; height: 26px; }
+  .switch::after { width: 20px; height: 20px; }
+  .race-toggle input:checked + .switch::after { transform: translateX(18px); }
+}

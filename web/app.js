@@ -387,94 +387,20 @@
     }
   })();
 
-  /* ================= brain / model map ================= */
+  /* ================= insights (multi-factor synthesis) ================= */
   (function () {
-    const m = D.models, s = $("brain");
-    s.appendChild(header("brain", "How it works <span class='sub'>&mdash; the model behind the numbers</span>"));
-
-    const cp = m && m.critical_power;
-    const pmc = D.pmc[D.pmc.length - 1] || {};
-    const rec = D.recovery_score || {};
-    const rd = D.readiness || {};
-    const q = D.data_quality;
-    const nr = (D.coaching && D.coaching.next_race) || null;
-
-    // node value helpers
-    const val = {
-      rides: `${q.total_rides} rides`,
-      power: `${q.rides_with_power} w/ power`,
-      hr: `${q.rides_with_hr} w/ HR`,
-      watch: D.recovery && D.recovery.source ? `HRV ${D.recovery.latest.hrv ?? '-'} · RHR ${D.recovery.latest.resting_hr ?? '-'}` : "connect",
-      cp: cp ? `${cp.cp} W · ${cp.w_prime_kj} kJ` : "-",
-      tss: `${(D.weekly_tss.slice(-1)[0] || {}).tss ?? '-'} this wk`,
-      ef: m && m.efficiency_factor && m.efficiency_factor.latest ? `EF ${m.efficiency_factor.latest}` : "-",
-      dec: m && m.decoupling ? `${m.decoupling.median}%` : "-",
-      pmc: `CTL ${pmc.ctl} · TSB ${pmc.tsb}`,
-      mono: m && m.monotony_strain && m.monotony_strain.monotony != null ? `mono ${m.monotony_strain.monotony}` : "-",
-      recov: `${rec.score ?? '-'}/100 ${rec.band || ''}`,
-      ready: rd.verdict || "-",
-      race: cp ? `~${cp.predict['45min']} W / 45min` : "-",
-      plan: nr ? `${nr.name.split(' ')[0]} ${nr.days_out}d` : "-",
-    };
-
-    // layout: 3 columns of nodes on a fixed canvas (scrolls on phone)
-    const W = 900, H = 560, NW = 168, NH = 50;
-    const col = [40, 366, 692];
-    const N = {
-      rides:  { x: col[0], y: 40,  t: "Garmin rides", v: val.rides, g: "in" },
-      power:  { x: col[0], y: 150, t: "Power streams", v: val.power, g: "in" },
-      hr:     { x: col[0], y: 260, t: "Heart rate", v: val.hr, g: "in" },
-      watch:  { x: col[0], y: 400, t: "Apple Watch", v: val.watch, g: "in" },
-      cp:     { x: col[1], y: 20,  t: "Critical Power / W'", v: val.cp, g: "eng" },
-      tss:    { x: col[1], y: 100, t: "Training load (TSS)", v: val.tss, g: "eng" },
-      ef:     { x: col[1], y: 180, t: "Efficiency Factor", v: val.ef, g: "eng" },
-      dec:    { x: col[1], y: 260, t: "Decoupling", v: val.dec, g: "eng" },
-      pmc:    { x: col[1], y: 360, t: "Fitness/Fatigue/Form", v: val.pmc, g: "eng" },
-      mono:   { x: col[1], y: 460, t: "Monotony / Strain", v: val.mono, g: "eng" },
-      recov:  { x: col[2], y: 120, t: "Recovery score", v: val.recov, g: "out" },
-      ready:  { x: col[2], y: 220, t: "Readiness", v: val.ready, g: "out" },
-      race:   { x: col[2], y: 330, t: "Race prediction", v: val.race, g: "out" },
-      plan:   { x: col[2], y: 430, t: "This week's plan", v: val.plan, g: "out" },
-    };
-    const edges = [
-      ["rides", "power"], ["rides", "hr"],
-      ["power", "cp"], ["power", "tss"], ["power", "ef"], ["power", "dec"],
-      ["hr", "tss"], ["hr", "ef"], ["hr", "dec"],
-      ["tss", "pmc"], ["tss", "mono"],
-      ["pmc", "recov"], ["watch", "recov"],
-      ["recov", "ready"], ["cp", "race"], ["ready", "plan"],
-    ];
-    const colors = { in: "var(--blue)", eng: "var(--accent)", out: "var(--green)" };
-    const fill = { in: "#eef1fe", eng: "#fce0f0", out: "#e6f6ee" };
-
-    const g = svg(W, H);
-    // fixed pixel size (override the global svg{width:100%}) so text stays legible
-    // and the diagram scrolls horizontally on phones instead of shrinking.
-    g.style.width = W + "px"; g.style.height = H + "px"; g.style.maxWidth = "none";
-    // edges first (behind nodes)
-    edges.forEach(([a, b]) => {
-      const A = N[a], B = N[b];
-      const x1 = A.x + NW, y1 = A.y + NH / 2, x2 = B.x, y2 = B.y + NH / 2;
-      const mx = (x1 + x2) / 2;
-      g.appendChild(node("path", { d: `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`,
-        fill: "none", stroke: "var(--line-2)", "stroke-width": 1.6 }));
+    const ins = D.insights, s = $("insights");
+    if (!ins || !ins.length) { s.style.display = "none"; return; }
+    s.appendChild(header("readiness", "The picture <span class='sub'>&mdash; how the signals connect</span>"));
+    const toneColor = { good: "var(--green)", watch: "var(--amber)", bad: "var(--red)", info: "var(--blue)" };
+    ins.forEach(it => {
+      const d = el("div");
+      d.style.cssText = "border-left:3px solid " + (toneColor[it.tone] || "var(--muted)") +
+        ";padding:2px 0 2px 12px;margin:12px 0";
+      d.innerHTML = `<div style="font-weight:700;font-size:14px;margin-bottom:2px">${it.title}</div>
+        <div style="font-size:13px;color:#5a4a55;line-height:1.5">${it.text}</div>`;
+      s.appendChild(d);
     });
-    // nodes
-    Object.values(N).forEach(nd => {
-      g.appendChild(node("rect", { x: nd.x, y: nd.y, width: NW, height: NH, rx: 11,
-        fill: fill[nd.g], stroke: colors[nd.g], "stroke-width": 1.5 }));
-      g.appendChild(node("text", { x: nd.x + 12, y: nd.y + 20, "font-size": 13, "font-weight": 700, fill: "var(--text)" }, nd.t));
-      g.appendChild(node("text", { x: nd.x + 12, y: nd.y + 38, "font-size": 12, fill: colors[nd.g] }, nd.v));
-    });
-    // column captions
-    [["Inputs", col[0]], ["Models", col[1]], ["Outputs", col[2]]].forEach(([t, x]) => {
-      g.appendChild(node("text", { x: x + NW / 2, y: H - 8, "text-anchor": "middle", "font-size": 12,
-        "font-weight": 700, fill: "var(--muted)", "letter-spacing": ".05em" }, t.toUpperCase()));
-    });
-
-    const wrap = el("div", "tbl-wrap"); wrap.appendChild(g);
-    s.appendChild(wrap);
-    s.appendChild(el("div", "note", "Data on the left (his rides and Apple Watch) feeds the models in the middle, which combine into the recovery and readiness estimates on the right. Every number updates together each day."));
   })();
 
   /* ================= time in zone ================= */

@@ -762,20 +762,22 @@ def fueling(weight_kg, pmc_series):
             "race_day": race_day, "hydration": hydration}
 
 
-def recovery_score(pmc_series, recovery):
+def recovery_score(pmc_series, recovery, models=None):
     """
     A single 0-100 recovery estimate (the Tour-de-France-style dial), blending
-    training form with body signals:
+    training form with body signals and load distribution:
       - Form (TSB) is the backbone - how much training fatigue he's carrying.
       - HRV and resting HR nudge it up or down (trend vs baseline if we have enough
         history, otherwise their absolute quality).
       - Sleep trims it when short.
+      - Training monotony/strain (Foster) trims it when load is dangerously flat.
     Junior-safe: leans conservative when signals conflict.
     """
     if not pmc_series:
         return None
     tsb = pmc_series[-1]["tsb"]
     rec = recovery or {}
+    m = models or {}
 
     # base from form: TSB 0 -> ~65, +25 -> ~93, -30 -> ~31
     score = 65 + tsb * 1.15
@@ -828,6 +830,11 @@ def recovery_score(pmc_series, recovery):
         elif sl >= 8:
             score += 4; drivers.append({"text": f"Good sleep ({sl} h)", "dir": "up"})
 
+    # training monotony/strain - flat, relentless load blunts recovery
+    ms = m.get("monotony_strain") or {}
+    if ms.get("high_risk"):
+        score -= 6; drivers.append({"text": f"Load is very monotonous (monotony {ms['monotony']})", "dir": "down"})
+
     score = int(max(3, min(99, round(score))))
 
     if score >= 80:
@@ -848,6 +855,98 @@ def recovery_score(pmc_series, recovery):
                         "hrv": hrv_pts[-1]["v"] if hrv_pts else None,
                         "resting_hr": rhr_pts[-1]["v"] if rhr_pts else None,
                         "sleep_h": sl}}
+
+
+def synthesize(pmc_series, models, recovery, ftp, ftp_info, tiz, nr, weight):
+    """
+    The 'brain': connect signals across every model into a handful of plain-language
+    observations. Each one deliberately combines 2-4 metrics so the relationships -
+    not just the isolated numbers - drive the read on him.
+    """
+    out = []
+    if not pmc_series:
+        return out
+    pmc = pmc_series[-1]
+    m = models or {}
+    cp = m.get("critical_power")
+    ef = m.get("efficiency_factor") or {}
+    dec = m.get("decoupling") or {}
+    dur = m.get("durability") or {}
+    ms = m.get("monotony_strain") or {}
+    vi = m.get("variability_index") or {}
+    rec = recovery or {}
+    ramp = round(pmc["ctl"] - pmc_series[-8]["ctl"], 1) if len(pmc_series) > 7 else None
+
+    # 1) Aerobic base trajectory: EF trend + decoupling + durability together
+    good_base = ((ef.get("trend_pct") or 0) > 0) + (dec.get("median") is not None and dec["median"] < 5) + (dur.get("score", 0) >= 90)
+    if ef.get("trend_pct") is not None or dec.get("median") is not None:
+        bits = []
+        if ef.get("trend_pct") is not None:
+            bits.append(f"efficiency {'up' if ef['trend_pct'] >= 0 else 'down'} {abs(ef['trend_pct'])}% (watts per heartbeat)")
+        if dec.get("median") is not None:
+            bits.append(f"decoupling only {dec['median']}%")
+        if dur.get("score") is not None:
+            bits.append(f"durability {dur['score']}/100")
+        tone = "good" if good_base >= 2 else "info"
+        verb = "is building well" if good_base >= 2 else "is holding steady"
+        out.append({"title": "Aerobic engine " + verb, "tone": tone,
+                    "text": "Three independent signals agree: " + ", ".join(bits) +
+                            ". A strong, fatigue-resistant aerobic base is his biggest weapon in a long XC race - it's what lets him keep punching late."})
+
+    # 2) Threshold reconciliation: Critical Power vs the 20-min FTP + W'
+    if cp and ftp:
+        gap = ftp - cp["cp"]
+        out.append({"title": "His real threshold sits around Critical Power", "tone": "info",
+                    "text": f"The Critical Power model (fit at R² {cp['r2']}) puts his sustainable ceiling at {cp['cp']} W, "
+                            f"{'just below' if 0 <= gap <= 15 else 'near'} the 20-min FTP estimate of {ftp} W. What really sets him apart is a large W' of "
+                            f"{cp['w_prime_kj']} kJ - a deep anaerobic battery. So he's not a diesel with a high threshold; he's a threshold-plus-huge-punch rider."})
+
+    # 3) Race archetype -> tactics: W' + Variability Index
+    if cp and vi.get("season_median"):
+        out.append({"title": "Built for punchy, stop-start racing", "tone": "info",
+                    "text": f"His riding runs at a variability index of {vi['season_median']} (spiky, not steady) and he carries a {cp['w_prime_kj']} kJ anaerobic battery. "
+                            "Tactically that means: spend the battery on the holeshot and the steep pitches, then settle to critical power and let it recharge on the flatter, faster sections."})
+
+    # 4) Overtraining / illness risk: monotony + strain + ramp + HRV/RHR
+    risk_bits, risk = [], 0
+    if ms.get("monotony") is not None:
+        risk_bits.append(f"monotony {ms['monotony']}")
+        if ms.get("high_risk"): risk += 2
+    if ramp is not None and ramp > RAMP_WARN:
+        risk_bits.append(f"fitness ramping +{ramp}/wk"); risk += 1
+    if rec.get("rhr_trend") and rec["rhr_trend"] >= 3:
+        risk_bits.append(f"resting HR +{rec['rhr_trend']}"); risk += 1
+    if rec.get("hrv_trend") and rec["hrv_trend"] <= -5:
+        risk_bits.append(f"HRV {rec['hrv_trend']}"); risk += 1
+    if risk_bits:
+        if risk >= 2:
+            out.append({"title": "Overtraining risk is worth watching", "tone": "watch",
+                        "text": "Several load-and-recovery signals are leaning the wrong way at once (" + ", ".join(risk_bits) +
+                                "). Individually each is minor; together they say add contrast - make the easy days truly easy - and don't stack hard days this week."})
+        else:
+            out.append({"title": "Load distribution looks healthy", "tone": "good",
+                        "text": "Training monotony is low (" + ", ".join(risk_bits) +
+                                "), meaning he's mixing genuinely hard and genuinely easy days rather than grinding the same medium every day. That's exactly how a junior should train."})
+
+    # 5) Zone balance vs polarization target
+    if tiz:
+        easy = sum(z["pct"] for z in tiz if z["zone"] in ("Z1", "Z2"))
+        if easy >= 72:
+            out.append({"title": "Intensity distribution is well polarized", "tone": "good",
+                        "text": f"About {round(easy)}% of his time is easy (Z1-Z2), with the rest genuinely hard. That polarized split is the most reliable way to lift the ceiling without piling on fatigue."})
+        else:
+            out.append({"title": "Push the easy days easier", "tone": "watch",
+                        "text": f"Only {round(easy)}% of riding time is truly easy; too much sits in the tempo 'grey zone'. Slowing the easy rides down would let the hard days be harder and sharpen his top end."})
+
+    # 6) Race outlook: TSB + days to race + recovery + CP prediction
+    if nr and cp:
+        d = nr["days_out"]
+        window = ("time to build then taper" if d > 14 else "into the taper now - hold intensity, cut volume")
+        out.append({"title": f"Outlook for {nr['name']} ({d} days)", "tone": "info",
+                    "text": f"He's carrying fitness of {pmc['ctl']} (CTL) with form at {pmc['tsb']}. With {d} days out there's {window}. "
+                            f"The Critical Power model projects he can hold about {cp['predict']['45min']} W for a 45-minute race - build the plan around defending that number on the climbs."})
+
+    return out[:6]
 
 
 def readiness(pmc_series, recovery):
@@ -953,11 +1052,13 @@ def main():
     config = load_config()
     excluded = config.get("excluded_races", [])
     recovery = recovery_block(apple, garmin_well)
+    models = build_models(rides, rides_raw, weight, series)
     ready = readiness(pmc_series, recovery)
-    rscore = recovery_score(pmc_series, recovery)
+    rscore = recovery_score(pmc_series, recovery, models)
     brief = coaching_brief(pmc_series, ready, ftp, ftp_info, tiz, recovery, excluded)
     fuel = fueling(weight, pmc_series)
-    models = build_models(rides, rides_raw, weight, series)
+    insights = synthesize(pmc_series, models, recovery, ftp, ftp_info, tiz,
+                          next_race(excluded), weight)
 
     # max HR seen (for HR-zone context)
     max_hr = max((r["max_hr"] for r in rides if r["max_hr"]), default=None)
@@ -995,6 +1096,7 @@ def main():
         "recovery_score": rscore,
         "coaching": brief,
         "models": models,
+        "insights": insights,
         "fueling": fuel,
         "race_calendar": [{"date": d, "name": n, "series": s} for d, n, s in RACE_CALENDAR],
         "excluded_races": excluded,

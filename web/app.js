@@ -610,4 +610,14 @@
       renderNextRace(); renderRaces();
     }
   }).catch(() => {});
+
+  /* Installed-app freshness: PWAs keep the page in memory when backgrounded, so
+     reopening can show yesterday's data. If the app has been open/idle a while
+     and comes back to the foreground, reload to pull the latest daily update. */
+  const loadedAt = Date.now();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && Date.now() - loadedAt > 15 * 60 * 1000) {
+      location.reload();
+    }
+  });
 })();

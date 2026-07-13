@@ -1,7 +1,7 @@
 /* Service worker: makes the dashboard installable and usable offline.
    Network-first for everything (so shell + data updates show immediately when
    online), falling back to the cache only when offline. */
-const CACHE = "paul-mtb-v2";
+const CACHE = "paul-mtb-v3";
 const SHELL = ["./index.html", "./style.css", "./app.js", "./manifest.webmanifest",
   "./icon-192.png", "./icon-512.png"];
 
@@ -22,8 +22,10 @@ self.addEventListener("fetch", (e) => {
 
   // network-first for everything: keep a fresh copy when online, fall back to
   // cache only when the network is unavailable (offline install still works).
+  // {cache:"no-store"} bypasses the browser HTTP cache so the installed app
+  // always gets the latest data.js after the 12:30 job pushes, not a stale copy.
   e.respondWith(
-    fetch(e.request).then((res) => {
+    fetch(e.request, { cache: "no-store" }).then((res) => {
       const copy = res.clone();
       caches.open(CACHE).then((c) => c.put(e.request, copy));
       return res;

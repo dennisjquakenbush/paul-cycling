@@ -591,6 +591,94 @@ def fueling(weight_kg, pmc_series):
             "race_day": race_day, "hydration": hydration}
 
 
+def recovery_score(pmc_series, recovery):
+    """
+    A single 0-100 recovery estimate (the Tour-de-France-style dial), blending
+    training form with body signals:
+      - Form (TSB) is the backbone - how much training fatigue he's carrying.
+      - HRV and resting HR nudge it up or down (trend vs baseline if we have enough
+        history, otherwise their absolute quality).
+      - Sleep trims it when short.
+    Junior-safe: leans conservative when signals conflict.
+    """
+    if not pmc_series:
+        return None
+    tsb = pmc_series[-1]["tsb"]
+    rec = recovery or {}
+
+    # base from form: TSB 0 -> ~65, +25 -> ~93, -30 -> ~31
+    score = 65 + tsb * 1.15
+    drivers = []
+
+    if tsb <= -20:
+        drivers.append({"text": "Deep fatigue from recent racing/hard training", "dir": "down"})
+    elif tsb < -8:
+        drivers.append({"text": "Carrying some training fatigue", "dir": "down"})
+    elif tsb > 12:
+        drivers.append({"text": "Well rested - form is fresh", "dir": "up"})
+    else:
+        drivers.append({"text": "Training load and freshness in balance", "dir": "flat"})
+
+    # HRV
+    hrv_pts = rec.get("hrv") or []
+    if rec.get("hrv_trend") is not None:
+        t = rec["hrv_trend"]
+        if t <= -5:
+            score -= 8; drivers.append({"text": f"HRV below baseline ({t})", "dir": "down"})
+        elif t >= 5:
+            score += 6; drivers.append({"text": f"HRV above baseline (+{t})", "dir": "up"})
+    elif hrv_pts:
+        v = hrv_pts[-1]["v"]
+        if v >= 80:
+            score += 4; drivers.append({"text": f"HRV is high ({round(v)} ms) - strong recovery signal", "dir": "up"})
+        elif v < 40:
+            score -= 4; drivers.append({"text": f"HRV is low ({round(v)} ms)", "dir": "down"})
+
+    # resting HR
+    rhr_pts = rec.get("resting_hr") or []
+    if rec.get("rhr_trend") is not None:
+        t = rec["rhr_trend"]
+        if t >= 3:
+            score -= 7; drivers.append({"text": f"Resting HR elevated (+{t} bpm)", "dir": "down"})
+        elif t <= -2:
+            score += 4; drivers.append({"text": "Resting HR low/settled", "dir": "up"})
+    elif rhr_pts:
+        v = rhr_pts[-1]["v"]
+        if v <= 50:
+            score += 3; drivers.append({"text": f"Resting HR is low ({round(v)} bpm) - well conditioned", "dir": "up"})
+        elif v >= 70:
+            score -= 3; drivers.append({"text": f"Resting HR is high ({round(v)} bpm)", "dir": "down"})
+
+    # sleep
+    sl = (rec.get("latest") or {}).get("sleep_h")
+    if sl is not None:
+        if sl < 7:
+            score -= 6; drivers.append({"text": f"Short sleep ({sl} h)", "dir": "down"})
+        elif sl >= 8:
+            score += 4; drivers.append({"text": f"Good sleep ({sl} h)", "dir": "up"})
+
+    score = int(max(3, min(99, round(score))))
+
+    if score >= 80:
+        band, color, est = "Fresh", "green", "Recovered and ready for quality work or a race."
+    elif score >= 65:
+        band, color, est = "Good", "green", "Nearly there - one steady day and he's set."
+    elif score >= 50:
+        band, color, est = "Moderate", "amber", "Recovering - keep the next day genuinely easy."
+    elif score >= 35:
+        band, color, est = "Low", "amber", "1-2 easy or rest days should refresh him."
+    else:
+        band, color, est = "Depleted", "red", "Needs 2-3 genuine rest/easy days to bounce back."
+
+    return {"score": score, "band": band, "color": color, "estimate": est,
+            "drivers": drivers[:4],
+            "has_body_data": bool(hrv_pts or rhr_pts),
+            "signals": {"tsb": tsb,
+                        "hrv": hrv_pts[-1]["v"] if hrv_pts else None,
+                        "resting_hr": rhr_pts[-1]["v"] if rhr_pts else None,
+                        "sleep_h": sl}}
+
+
 def readiness(pmc_series, recovery):
     """Junior-athlete readiness verdict: fresh / normal / fatigued / dig-a-hole."""
     if not pmc_series:
@@ -695,6 +783,7 @@ def main():
     excluded = config.get("excluded_races", [])
     recovery = recovery_block(apple, garmin_well)
     ready = readiness(pmc_series, recovery)
+    rscore = recovery_score(pmc_series, recovery)
     brief = coaching_brief(pmc_series, ready, ftp, ftp_info, tiz, recovery, excluded)
     fuel = fueling(weight, pmc_series)
 
@@ -731,6 +820,7 @@ def main():
         "weekly_tss": weekly,
         "recovery": recovery,
         "readiness": ready,
+        "recovery_score": rscore,
         "coaching": brief,
         "fueling": fuel,
         "race_calendar": [{"date": d, "name": n, "series": s} for d, n, s in RACE_CALENDAR],

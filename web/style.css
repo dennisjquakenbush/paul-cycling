@@ -191,6 +191,27 @@ svg { display: block; width: 100%; height: auto; overflow: visible; }
 footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 8px; line-height: 1.7; }
 footer a { color: var(--accent); }
 
+/* recovery dial */
+.dial-wrap { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.dial { position: relative; width: 132px; height: 132px; flex: none; }
+.dial .center { position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; }
+.dial .score { font-size: 38px; font-weight: 800; line-height: 1; }
+.dial .of { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.dial-info { flex: 1; min-width: 200px; }
+.dial-band { font-size: 22px; font-weight: 800; letter-spacing: -.2px; }
+.dial-band.green { color: var(--green); }
+.dial-band.amber { color: var(--amber); }
+.dial-band.red { color: var(--red); }
+.dial-est { font-size: 14px; color: #5a4a55; margin: 4px 0 12px; }
+.dial-drivers { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.dial-drivers li { font-size: 13px; color: #5a4a55; display: flex; align-items: center; gap: 8px; }
+.dial-drivers .ar { font-weight: 800; width: 14px; text-align: center; flex: none; }
+.dial-drivers .up { color: var(--green); }
+.dial-drivers .down { color: var(--red); }
+.dial-drivers .flat { color: var(--muted); }
+.dial-note { font-size: 12px; color: var(--muted); margin-top: 10px; }
+
 /* horizontal-scroll wrapper so wide tables never break the layout */
 .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 

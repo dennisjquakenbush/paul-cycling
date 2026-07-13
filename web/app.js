@@ -76,6 +76,55 @@
   $("subhead").textContent = `Mountain bike racer - DINO & Indiana NICA  ·  age ${p.age}  ·  ${Math.round(lbs(p.weight_kg))} lb`;
   $("stamp").innerHTML = `updated ${new Date(D.generated_at).toLocaleString()}<br>${D.data_quality.total_rides} rides analyzed`;
 
+  /* ================= recovery dial (Tour-de-France style) ================= */
+  (function () {
+    const r = D.recovery_score, s = $("recoverydial");
+    if (!r) { s.style.display = "none"; return; }
+    s.appendChild(header("readiness", "Recovery <span class='sub'>&mdash; today's estimate</span>"));
+    const colorVar = { green: "var(--green)", amber: "var(--amber)", red: "var(--red)" }[r.color] || "var(--accent)";
+
+    const wrap = el("div", "dial-wrap");
+
+    // circular gauge
+    const dial = el("div", "dial");
+    const sz = 132, cx = sz / 2, cy = sz / 2, rad = 56, sw = 13;
+    const C = 2 * Math.PI * rad;
+    const g = svg(sz, sz);
+    g.setAttribute("width", sz); g.setAttribute("height", sz);
+    // track
+    g.appendChild(node("circle", { cx, cy, r: rad, fill: "none", stroke: "var(--line)", "stroke-width": sw }));
+    // value arc (starts at top, clockwise)
+    g.appendChild(node("circle", {
+      cx, cy, r: rad, fill: "none", stroke: colorVar, "stroke-width": sw,
+      "stroke-linecap": "round", "stroke-dasharray": C,
+      "stroke-dashoffset": C * (1 - r.score / 100),
+      transform: `rotate(-90 ${cx} ${cy})`,
+    }));
+    dial.appendChild(g);
+    const center = el("div", "center");
+    center.appendChild(el("div", "score", r.score));
+    center.appendChild(el("div", "of", "/ 100"));
+    dial.appendChild(center);
+    wrap.appendChild(dial);
+
+    // text
+    const info = el("div", "dial-info");
+    info.appendChild(el("div", "dial-band " + r.color, r.band));
+    info.appendChild(el("div", "dial-est", r.estimate));
+    const ul = el("ul", "dial-drivers");
+    const arrow = { up: "&#9650;", down: "&#9660;", flat: "&#8226;" };
+    (r.drivers || []).forEach(d => {
+      const li = el("li");
+      li.innerHTML = `<span class="ar ${d.dir}">${arrow[d.dir] || "&#8226;"}</span><span>${d.text}</span>`;
+      ul.appendChild(li);
+    });
+    info.appendChild(ul);
+    if (!r.has_body_data) info.appendChild(el("div", "dial-note",
+      "Based on training form so far. HRV, resting HR and sleep from Apple Health refine this as they build up."));
+    wrap.appendChild(info);
+    s.appendChild(wrap);
+  })();
+
   /* ================= readiness ================= */
   (function () {
     const r = D.readiness, s = $("readiness");

@@ -5,5 +5,6 @@
   "apple_health_icloud_dir": "/Users/dennisquakenbush/Documents/Paulhealth/paulhealth",
   "publish_to_github": true,
   "rider_weight_lb": 126.6,
-  "bike_weight_lb": 24.7
+  "bike_weight_lb": 24.7,
+  "does_short_track": true
 }

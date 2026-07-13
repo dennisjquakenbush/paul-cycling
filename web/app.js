@@ -424,8 +424,9 @@
     if (cp) {
       const note = el("div", "note");
       const conf = cp.r2 != null ? `The model fits his efforts at R&sup2;=${cp.r2} (1.0 is perfect).` : "";
+      const st = cp.predict['short_track_25min'] ? ` <strong>${cp.predict['short_track_25min']} W</strong> for a 25-min short track,` : "";
       note.innerHTML = `Critical Power is <strong style="color:var(--accent)">${cp.cp} W (${cp.cp_wkg} W/kg)</strong> with a W' of ${cp.w_prime_kj} kJ. ${conf} ` +
-        `From this model he can sustain about <strong>${cp.predict['45min']} W</strong> for a 45-min race and <strong>${cp.predict['75min']} W</strong> for 75 min.`;
+        `From this model he can sustain about${st} <strong>${cp.predict['45min']} W</strong> for a 45-min XC race and <strong>${cp.predict['75min']} W</strong> for 75 min.`;
       s.appendChild(note);
     }
     if (ms && ms.high_risk) {

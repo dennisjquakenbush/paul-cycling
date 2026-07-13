@@ -437,6 +437,7 @@ def fit_critical_power(mmp, weight):
         "points": [{"secs": t, "watts": round(w)} for t, w in pts],
         # CP-model prediction of sustainable power for a race of length T
         "predict": {
+            "short_track_25min": round(cp + wprime / 1500),
             "20min": round(cp + wprime / 1200),
             "45min": round(cp + wprime / 2700),
             "75min": round(cp + wprime / 4500),
@@ -1088,7 +1089,7 @@ def recovery_score(pmc_series, recovery, models=None):
                         "sleep_h": sl}}
 
 
-def synthesize(pmc_series, models, recovery, ftp, ftp_info, tiz, nr, weight):
+def synthesize(pmc_series, models, recovery, ftp, ftp_info, tiz, nr, weight, does_short_track=False):
     """
     The 'brain': connect signals across every model into a handful of plain-language
     observations. Each one deliberately combines 2-4 metrics so the relationships -
@@ -1211,6 +1212,14 @@ def synthesize(pmc_series, models, recovery, ftp, ftp_info, tiz, nr, weight):
                                if heavy else
                                f"Every pound off the bike saves ~{clp['sec_per_lb_per_100ft']}s per 100 ft climbed.")})
 
+    # 7.8) Short track: his best-fit discipline
+    if does_short_track and cp and vi.get("season_median"):
+        st_w = cp["predict"].get("short_track_25min")
+        out.append({"title": "Short track is his event", "tone": "good",
+                    "text": f"Short track (~20-30 min, all-out, constant surges) rewards exactly what he has: a {cp['w_prime_kj']} kJ anaerobic battery, strong 5-min power, and a punchy riding style (VI {vi['season_median']}). "
+                            f"The CP model says he can hold about {st_w} W for a 25-min short track - higher than his longer-XC number, because the shorter the race the more of that battery he can spend. "
+                            "Race it aggressively: fight for a front-row start, go hard off the line for clear air, then surge every rise and sprint each corner exit - repeatability is the weapon."})
+
     # 8) Race outlook: TSB + days to race + recovery + CP prediction
     if nr and cp:
         d = nr["days_out"]
@@ -1219,7 +1228,7 @@ def synthesize(pmc_series, models, recovery, ftp, ftp_info, tiz, nr, weight):
                     "text": f"He's carrying fitness of {pmc['ctl']} (CTL) with form at {pmc['tsb']}. With {d} days out there's {window}. "
                             f"The Critical Power model projects he can hold about {cp['predict']['45min']} W for a 45-minute race - build the plan around defending that number on the climbs."})
 
-    return out[:9]
+    return out[:10]
 
 
 def readiness(pmc_series, recovery):
@@ -1337,7 +1346,8 @@ def main():
     brief = coaching_brief(pmc_series, ready, ftp, ftp_info, tiz, recovery, excluded)
     fuel = fueling(weight, pmc_series)
     nr = next_race(excluded)
-    insights = synthesize(pmc_series, models, recovery, ftp, ftp_info, tiz, nr, weight)
+    insights = synthesize(pmc_series, models, recovery, ftp, ftp_info, tiz, nr, weight,
+                          does_short_track=config.get("does_short_track", False))
     weather_block = race_weather(nr)
 
     # max HR seen (for HR-zone context)

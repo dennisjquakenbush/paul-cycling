@@ -121,7 +121,8 @@ def ride_metrics(a, ftp):
         "elev_gain_m": round(a.get("elev_gain_m") or 0),
         "grit": a.get("grit"), "flow": a.get("flow"),
         "max_temp_c": a.get("max_temp_c"), "min_temp_c": a.get("min_temp_c"),
-        "avg_cad": a.get("avg_cad"), "mmp_garmin": a.get("mmp") or {},
+        "avg_cad": a.get("avg_cad"), "avg_speed_mps": a.get("avg_speed_mps"),
+        "mmp_garmin": a.get("mmp") or {},
         "has_power": has_power, "has_hr": has_hr,
         "avg_power": round(sum(pvals) / len(pvals), 1) if has_power else None,
         "max_power": round(max(pvals), 1) if has_power else None,
@@ -554,6 +555,60 @@ def mtb_skills(rides):
             "grit_max": round(max(v for _, v in grit), 1)}
 
 
+def descending(rides):
+    """
+    'Free speed' on descents. Flow rises naturally as Grit (trail difficulty) rises,
+    so the raw Flow number is misleading. We fit his own Flow-vs-Grit line, then read
+    each ride's residual: Flow BELOW his line = smoother than his norm for that
+    difficulty (skill), ABOVE = choppy (braking too much = time lost). We combine that
+    with descent speed to estimate how much free speed is on the table.
+    """
+    pts = [r for r in rides if r["type"] == "mountain_biking"
+           and r.get("grit") and r.get("flow") is not None]
+    if len(pts) < 6:
+        return None
+    grit = [r["grit"] for r in pts]
+    flow = [r["flow"] for r in pts]
+    n = len(pts)
+    sx, sy = sum(grit), sum(flow)
+    sxx = sum(g * g for g in grit)
+    sxy = sum(g * f for g, f in zip(grit, flow))
+    denom = n * sxx - sx * sx
+    slope = (n * sxy - sx * sy) / denom if denom else 0.0     # flow gained per grit
+    intercept = (sy - slope * sx) / n
+
+    resid = []
+    for r in pts:
+        r["_fr"] = r["flow"] - (slope * r["grit"] + intercept)
+        resid.append(r["_fr"])
+    sd = statistics.pstdev(resid) or 1.0
+    by_date = sorted(pts, key=lambda x: x["date"])
+    recent = by_date[-6:]
+    prior = by_date[:-6][-6:]
+    recent_resid = statistics.mean(r["_fr"] for r in recent)
+    # smoother-than-his-norm -> higher score
+    score = int(max(1, min(99, round(50 - (recent_resid / sd) * 22))))
+    trend = None
+    if prior:
+        trend = round(statistics.mean(r["_fr"] for r in prior) - recent_resid, 2)  # +ve = improving
+
+    # descent speed context (mph) on the more descent-heavy rides
+    spd = [r.get("avg_speed_mps") for r in pts if r.get("avg_speed_mps")]
+    avg_mph = round(statistics.mean(spd) * 2.23694, 1) if spd else None
+
+    flow_per10 = slope * 10
+    if score < 45 or flow_per10 > 1.5:
+        free, ftxt = "high", "There's real time to gain by braking less and carrying speed through the rough stuff."
+    elif score < 60:
+        free, ftxt = "moderate", "Some free speed available - smoothing the choppiest descents would help."
+    else:
+        free, ftxt = "low", "He's already smooth for the terrain he rides - little free speed left on descents."
+
+    return {"skill_score": score, "trend": trend, "free_speed": free,
+            "flow_per_10grit": round(flow_per10, 2), "avg_speed_mph": avg_mph,
+            "note": ftxt}
+
+
 def heat_exposure(rides):
     """
     Heat adaptation from ride temperatures (F). Racing/training in the heat builds
@@ -614,6 +669,7 @@ def build_models(rides, rides_raw, weight, daily_series):
         "durability": durability(rides),
         "decoupling": season_decoupling(rides),
         "mtb_skills": mtb_skills(rides),
+        "descending": descending(rides),
         "heat": heat_exposure(rides),
         "climbing": climbing_cadence(rides),
         "season_kj": round(total_kj),
@@ -1080,19 +1136,24 @@ def synthesize(pmc_series, models, recovery, ftp, ftp_info, tiz, nr, weight):
             out.append({"title": "Not much recent heat exposure", "tone": "info",
                         "text": f"Only {heat['hot_ride_pct']}% of recent rides were hot. If a race day looks hot, expect some power loss and plan a couple of deliberately warm rides in the 10 days before to adapt."})
 
-    # 7) MTB skills: Grit + Flow
+    # 7) Descending 'free speed': Grit + Flow (difficulty-normalized) + speed
+    desc = m.get("descending")
     sk = m.get("mtb_skills")
-    if sk and sk.get("grit_recent") is not None:
-        bits = f"riding terrain around Grit {sk['grit_recent']}"
-        if sk.get("flow_recent") is not None:
-            bits += f" with a Flow of {sk['flow_recent']} (lower is smoother)"
+    if desc:
+        gritline = ""
+        if sk and sk.get("grit_recent") is not None:
+            gritline = f" (recently around Grit {sk['grit_recent']}, harder trails than earlier)" if (sk.get("grit_trend") or 0) > 5 else f" (Grit ~{sk['grit_recent']})"
         trend_txt = ""
-        if sk.get("flow_trend") is not None and sk["flow_trend"] < -0.3:
-            trend_txt = " His descending is getting smoother, which is free speed in a race."
-        elif sk.get("grit_trend") is not None and sk["grit_trend"] > 5:
-            trend_txt = " He's been on harder, more technical trails lately - good race-specific prep."
-        out.append({"title": "Technical riding is race-specific", "tone": "info",
-                    "text": f"He's {bits}.{trend_txt} For a fitness-strong rider, sharper descending and line choice is often where the easy time gains are."})
+        if desc.get("trend") is not None:
+            if desc["trend"] > 0.2:
+                trend_txt = " And it's trending the right way - he's getting smoother for the difficulty."
+            elif desc["trend"] < -0.2:
+                trend_txt = " It's slipped a little lately, likely because the trails got gnarlier."
+        tone = "good" if desc["free_speed"] == "low" else ("watch" if desc["free_speed"] == "high" else "info")
+        out.append({"title": f"Descending: {desc['free_speed']} free speed available", "tone": tone,
+                    "text": f"Adjusting Flow for how hard the terrain is{gritline}, his descending skill scores {desc['skill_score']}/100 "
+                            f"(50 is his own average){' at about ' + str(desc['avg_speed_mph']) + ' mph' if desc.get('avg_speed_mph') else ''}. "
+                            f"{desc['note']}{trend_txt} For a rider this fit, descending is usually where the cheap seconds are."})
 
     # 8) Race outlook: TSB + days to race + recovery + CP prediction
     if nr and cp:

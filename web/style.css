@@ -250,9 +250,10 @@ footer a { color: var(--accent); }
   body { font-size: 16px; }
   #app { padding: 16px 12px 48px; }
   .card { padding: 16px 14px; border-radius: 14px; margin-bottom: 14px; }
-  .topbar { margin-bottom: 16px; }
+  /* stack the header so the timestamp reads cleanly under the name, left-aligned */
+  .topbar { flex-direction: column; align-items: flex-start; gap: 6px; margin-bottom: 16px; }
+  .stamp { font-size: 11px; text-align: left; }
   h1 { font-size: 20px; }
-  .stamp { font-size: 11px; }
 
   h2 { font-size: 13px; letter-spacing: .04em; flex-wrap: wrap; }
   h2 .sub { display: block; margin: 3px 0 0; width: 100%; font-size: 12px; }

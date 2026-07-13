@@ -151,6 +151,19 @@ svg { display: block; width: 100%; height: auto; overflow: visible; }
   border: 6px solid transparent; border-top-color: #fff; }
 .tip:hover .tt, .tip.open .tt { opacity: 1; visibility: visible; }
 
+/* On phones, hover popovers can't fit on-screen - show a pinned bottom toast
+   instead (always fully visible, never clipped). */
+.tiptoast { position: fixed; left: 12px; right: 12px; bottom: 16px; z-index: 200;
+  background: #fff; color: #4a3a45; border: 1px solid var(--line-2); border-radius: 14px;
+  padding: 14px 16px 15px; font-size: 14px; line-height: 1.5;
+  box-shadow: 0 14px 44px rgba(180,70,140,.34); display: none; }
+.tiptoast.show { display: block; }
+.tiptoast .tt-h { font-weight: 700; color: var(--accent); font-size: 11px;
+  text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+@media (max-width: 640px) {
+  .tip .tt { display: none; }   /* use the toast, not the inline popover */
+}
+
 /* race toggles */
 .race-toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
 .race-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
@@ -182,8 +195,8 @@ svg { display: block; width: 100%; height: auto; overflow: visible; }
 .rider-col.peers h3 { color: var(--blue); }
 .rider-col.asp h3 { color: var(--amber); }
 .rider { background: #fff; border: 1px solid var(--line); border-radius: 11px; padding: 10px 12px; margin-bottom: 8px; }
-.rider .rn { font-weight: 700; font-size: 14px; }
-.rider .rn .gap { float: right; color: var(--accent); font-weight: 800; font-size: 12px; }
+.rider .rn { font-weight: 700; font-size: 14px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.rider .rn .gap { color: var(--accent); font-weight: 800; font-size: 12px; flex: none; }
 .rider .rd { font-size: 12px; color: #5a4a55; margin-top: 3px; line-height: 1.4; }
 .flag { background: #fdf3e2; border: 1px solid #f0d5a8; color: #8a6a2a; border-radius: 10px;
   padding: 10px 12px; font-size: 13px; margin-bottom: 12px; }

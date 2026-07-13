@@ -47,21 +47,37 @@
     thisweek: "A suggested week of training shaped by his current form, how fast he is ramping, and the next race. A smart default, not a fixed prescription.",
     riders: "Riders from official DINO results to train with and race against. Based on the rounds Paul has actually raced, so it sharpens as the season goes on.",
   };
+  // shared bottom toast for phone tooltips (never clips off-screen)
+  let toastEl = null;
+  const showToast = (text) => {
+    if (!toastEl) { toastEl = el("div", "tiptoast"); document.body.appendChild(toastEl); }
+    toastEl.innerHTML = `<div class="tt-h">What this means</div>${text}`;
+    toastEl.classList.add("show");
+  };
+  const hideToast = () => { if (toastEl) toastEl.classList.remove("show"); };
+
   const tip = (key) => {
     const t = GLOSSARY[key]; if (!t) return null;
     const s = el("span", "tip", "?");
     s.appendChild(el("span", "tt", t));
-    // tap to toggle on touch devices (hover does not exist there)
     s.addEventListener("click", (e) => {
       e.stopPropagation();
-      const open = s.classList.contains("open");
-      document.querySelectorAll(".tip.open").forEach(x => x.classList.remove("open"));
-      if (!open) s.classList.add("open");
+      if (MOBILE) {                      // phone: pinned bottom toast
+        const showing = toastEl && toastEl.classList.contains("show") && toastEl._key === key;
+        if (showing) { hideToast(); }
+        else { showToast(t); toastEl._key = key; }
+      } else {                           // desktop tap: inline popover
+        const open = s.classList.contains("open");
+        document.querySelectorAll(".tip.open").forEach(x => x.classList.remove("open"));
+        if (!open) s.classList.add("open");
+      }
     });
     return s;
   };
-  document.addEventListener("click", () =>
-    document.querySelectorAll(".tip.open").forEach(x => x.classList.remove("open")));
+  document.addEventListener("click", () => {
+    document.querySelectorAll(".tip.open").forEach(x => x.classList.remove("open"));
+    hideToast();
+  });
   const header = (key, html) => { const h = el("h2", null, html); const t = tip(key); if (t) h.appendChild(t); return h; };
 
   /* ---- static Indiana race calendar (from PAUL_DATA, falls back to constant) ---- */
@@ -393,7 +409,7 @@
       s.appendChild(e);
       return;
     }
-    const g = el("div", "stats"); g.style.gridTemplateColumns = "repeat(3,1fr)";
+    const g = el("div", "stats"); g.style.gridTemplateColumns = "repeat(auto-fit, minmax(130px, 1fr))";
     const spark = (points, color, unit, label, trend, goodDown, key) => {
       const d = el("div", "stat");
       const last = points.length ? points[points.length - 1].v : null;

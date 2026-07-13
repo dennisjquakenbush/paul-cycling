@@ -162,62 +162,122 @@ def _config_icloud_dir():
         return None
 
 
-def find_input():
-    """
-    Return (path, kind) of the newest usable export, searching the local inbox and
-    (for the hands-off Shortcut) a configured iCloud Drive folder.
-    """
+import re
+
+# lenient extractors for a single daily record written by the iOS Shortcut, even
+# when its JSON is slightly malformed (empty sleep field, stray trailing text).
+_FIELD_RE = {
+    "resting_hr": re.compile(r'"?resting_hr"?\s*[:=]\s*(\d+(?:\.\d+)?)'),
+    "hrv": re.compile(r'"?hrv"?\s*[:=]\s*(\d+(?:\.\d+)?)'),
+    "sleep_h": re.compile(r'"?sleep_h"?\s*[:=]\s*(\d+(?:\.\d+)?)'),
+}
+_DATE_RE = re.compile(r'"?date"?\s*[:=]\s*"?(\d{4}-\d{2}-\d{2})')
+
+
+def parse_loose_text(text):
+    """Best-effort parse of a Shortcut's daily file: try JSON, else regex."""
+    text = text.strip()
+    # first try clean JSON (single object or list)
+    try:
+        return parse_auto_export_json(json.loads(text))
+    except Exception:
+        pass
+    # fall back to regex extraction of one day's fields
+    dm = _DATE_RE.search(text)
+    if not dm:
+        return {}
+    rec = {}
+    for field, rx in _FIELD_RE.items():
+        m = rx.search(text)
+        if m:
+            rec[field] = round(float(m.group(1)), 2)
+    return {dm.group(1): rec}
+
+
+def gather_files():
+    """All candidate files across the inbox and the configured iCloud folder."""
     dirs = [INBOX]
     icloud = _config_icloud_dir()
     if icloud and os.path.isdir(os.path.expanduser(icloud)):
         dirs.append(os.path.expanduser(icloud))
-    candidates = []
+    exports, dailies = [], []   # (mtime, path)
     for d in dirs:
-        for pat, kind in [("*.zip", "zip"), ("export.xml", "xml"),
-                          ("*.xml", "xml"), ("*.json", "json")]:
-            for p in glob.glob(os.path.join(d, pat)):
-                candidates.append((os.path.getmtime(p), p, kind))
-    if not candidates:
-        return None
-    candidates.sort(reverse=True)
-    _, path, kind = candidates[0]
-    return path, kind
+        for p in glob.glob(os.path.join(d, "*")):
+            low = p.lower()
+            if low.endswith(".zip") or low.endswith(".xml"):
+                exports.append((os.path.getmtime(p), p))
+            elif low.endswith(".json") or low.endswith(".txt"):
+                dailies.append((os.path.getmtime(p), p))
+    exports.sort(reverse=True)
+    dailies.sort()
+    return exports, dailies
+
+
+def merge_day(days, date, rec):
+    """Field-wise merge so a daily file never wipes a value from a full export."""
+    if not rec:
+        return
+    cur = days.setdefault(date, {})
+    for k, v in rec.items():
+        if v is not None:
+            cur[k] = v
 
 
 def main():
     os.makedirs(INBOX, exist_ok=True)
-    found = find_input()
-    if not found:
-        print(f"No Apple Health export found in {INBOX}/")
-        print("Drop export.zip (Health app > Export All Health Data) there and re-run.")
-        # leave any previous apple_health.json in place
-        return
+    exports, dailies = gather_files()
+    if not exports and not dailies:
+        icloud = _config_icloud_dir()
+        print(f"No Apple Health data found in {INBOX}/" + (f" or {icloud}/" if icloud else ""))
+        print("Set up the iOS Shortcut / drop export.zip, then re-run.")
+        return  # leave any previous apple_health.json in place
 
-    path, kind = found
-    print(f"Reading {os.path.basename(path)} ({kind})...")
-    if kind == "zip":
-        with zipfile.ZipFile(path) as z:
-            name = next((n for n in z.namelist() if n.endswith("export.xml")), None)
-            if not name:
-                print("  no export.xml inside zip")
-                return
-            with z.open(name) as f:
-                days = parse_export_xml(f)
-    elif kind == "xml":
-        with open(path, "rb") as f:
-            days = parse_export_xml(f)
-    else:  # json
-        days = parse_auto_export_json(json.load(open(path)))
+    # start cumulative: keep whatever we imported before, so history survives even
+    # if old daily files get cleaned out of the folder
+    days = {}
+    if os.path.exists(OUT):
+        try:
+            days = dict(json.load(open(OUT)).get("days", {}))
+        except Exception:
+            days = {}
+
+    # newest full export contributes bulk history (sleep included)
+    if exports:
+        _, path = exports[0]
+        print(f"Reading full export {os.path.basename(path)}...")
+        try:
+            if path.lower().endswith(".zip"):
+                with zipfile.ZipFile(path) as z:
+                    name = next((n for n in z.namelist() if n.endswith("export.xml")), None)
+                    parsed = parse_export_xml(z.open(name)) if name else {}
+            else:
+                parsed = parse_export_xml(open(path, "rb"))
+            for d, rec in parsed.items():
+                merge_day(days, d, rec)
+        except Exception as e:
+            print(f"  export parse failed: {e}")
+
+    # every daily Shortcut file (oldest first, so newest wins on conflicts)
+    n_daily = 0
+    for _, path in dailies:
+        try:
+            parsed = parse_loose_text(open(path, encoding="utf-8", errors="ignore").read())
+            for d, rec in parsed.items():
+                merge_day(days, d, rec)
+            n_daily += 1
+        except Exception as e:
+            print(f"  skip {os.path.basename(path)}: {e}")
 
     out = {"source": "apple_health", "imported_at": datetime.now().isoformat(timespec="seconds"),
-           "source_file": os.path.basename(path), "days": days}
+           "days": days}
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     json.dump(out, open(OUT, "w"), indent=2)
 
     with_sleep = sum(1 for r in days.values() if r.get("sleep_h"))
     with_rhr = sum(1 for r in days.values() if r.get("resting_hr"))
     with_hrv = sum(1 for r in days.values() if r.get("hrv"))
-    print(f"  {len(days)} days: {with_rhr} with RHR, {with_hrv} with HRV, {with_sleep} with sleep")
+    print(f"  {len(days)} days total ({n_daily} daily files): "
+          f"{with_rhr} with RHR, {with_hrv} with HRV, {with_sleep} with sleep")
 
 
 if __name__ == "__main__":

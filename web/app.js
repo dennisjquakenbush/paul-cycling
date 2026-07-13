@@ -100,11 +100,11 @@
   /* ---- static Indiana race calendar (from PAUL_DATA, falls back to constant) ---- */
   const RACES = (D.race_calendar && D.race_calendar.length) ? D.race_calendar.map(r => ({ name: r.name, date: r.date, series: r.series })) : [];
   const raceKey = (r) => `${r.date}|${r.name}`;
-  const PRIORITY = new Set(["DINO", "NICA"]);        // drive next-race + taper; short track doesn't
+  const PRIORITY = new Set(["DINO", "NICA"]);        // XC races drive the taper wording
   let excluded = new Set(D.excluded_races || []);   // updated live from /api/config
 
-  // "next race" and taper only consider his priority XC racing
-  const upcoming = () => RACES.filter(r => r.date >= today && PRIORITY.has(r.series) && !excluded.has(raceKey(r))).sort((a, b) => a.date < b.date ? -1 : 1);
+  // the next race card/highlight points to the soonest race of any kind
+  const upcoming = () => RACES.filter(r => r.date >= today && !excluded.has(raceKey(r))).sort((a, b) => a.date < b.date ? -1 : 1);
 
   /* ================= header ================= */
   const p = D.profile;
@@ -272,7 +272,10 @@
     big.appendChild(el("div", "race-series", `${nr.series} series  ·  ${new Date(nr.date + "T00:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}`));
     s.appendChild(big);
     const g = el("div", "note");
-    if (dleft <= 3) g.textContent = "Race week: short sharpeners only, extra sleep, top up carbs. Legs over fitness now.";
+    if (!PRIORITY.has(nr.series)) {
+      // short track / side event - no taper, just show up sharp
+      g.textContent = "Short track: a fast, punchy hit-out - no taper needed. Train normally, easy spin the day before, and warm up thoroughly since it's flat-out from the gun.";
+    } else if (dleft <= 3) g.textContent = "Race week: short sharpeners only, extra sleep, top up carbs. Legs over fitness now.";
     else if (dleft <= 10) g.textContent = "Begin the taper: hold intensity, cut volume ~30-40%. Arrive fresh, not fatigued.";
     else g.textContent = "Build phase: this is the window for hard, race-specific work before the taper.";
     s.appendChild(g);

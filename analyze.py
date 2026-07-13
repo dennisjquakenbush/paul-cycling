@@ -812,6 +812,7 @@ VENUE_COORDS = {
     "Griffin Bike Park": (39.42, -87.31),
     "Southwestway Park": (39.664, -86.269),
     "Stoney Run, Hebron": (41.35, -87.16),
+    "Cycloplex Short Track": (39.833, -86.196),   # Marian University / Major Taylor Velodrome, Indy
 }
 
 FORECAST_WINDOW_DAYS = 16
@@ -846,7 +847,9 @@ def race_weather(nr):
         elif hi <= 55:
             adj.append(("Cool race", f"~{hi} F. Warm up longer, arm/knee warmers to the line; carbs matter more than fluid."))
     if fc.get("mud_risk"):
-        adj.append(("Likely mud", f"{fc.get('prior_precip_in',0)} in of rain in the two days prior. Drop tire pressure a few psi for grip, expect slower lap times and higher effort, and scrub/keep the drivetrain clean. Pre-ride the tricky lines."))
+        cause = (f"{fc['prior_precip_in']} in of rain in the two days prior" if fc.get("prior_precip_in", 0) >= 0.25
+                 else "rain in the forecast for race day")
+        adj.append(("Likely mud", f"{cause}. Drop tire pressure a few psi for grip, expect slower lap times and higher effort, and keep the drivetrain clean. Pre-ride the tricky lines."))
     elif (fc.get("precip_prob") or 0) >= 50:
         adj.append(("Rain possible", f"{fc.get('precip_prob')}% chance. Pack a rain layer; if it wets the course, ride the mud advice above."))
     if fc.get("wind_mph") and fc["wind_mph"] >= 15:
@@ -872,6 +875,19 @@ def next_race(excluded=None):
     d, name, series = upcoming[0]
     days = (datetime.fromisoformat(d).date() - date.today()).days
     return {"date": d, "name": name, "series": series, "days_out": days}
+
+
+def next_race_any(excluded=None):
+    """The soonest upcoming race of ANY series (drives the Next Race card + weather)."""
+    excluded = set(excluded or [])
+    t = date.today().isoformat()
+    entries = sorted(RACE_CALENDAR + short_track_races(load_config()))
+    upcoming = [r for r in entries if r[0] >= t and f"{r[0]}|{r[1]}" not in excluded]
+    if not upcoming:
+        return None
+    d, name, series = upcoming[0]
+    return {"date": d, "name": name, "series": series,
+            "days_out": (datetime.fromisoformat(d).date() - date.today()).days}
 
 
 def short_track_races(config):
@@ -1354,10 +1370,10 @@ def main():
     rscore = recovery_score(pmc_series, recovery, models)
     brief = coaching_brief(pmc_series, ready, ftp, ftp_info, tiz, recovery, excluded)
     fuel = fueling(weight, pmc_series)
-    nr = next_race(excluded)
+    nr = next_race(excluded)                    # priority XC - drives taper coaching
     insights = synthesize(pmc_series, models, recovery, ftp, ftp_info, tiz, nr, weight,
                           does_short_track=config.get("does_short_track", False))
-    weather_block = race_weather(nr)
+    weather_block = race_weather(next_race_any(excluded))   # soonest race of any kind
 
     # max HR seen (for HR-zone context)
     max_hr = max((r["max_hr"] for r in rides if r["max_hr"]), default=None)

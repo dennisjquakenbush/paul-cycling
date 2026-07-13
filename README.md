@@ -1,11 +1,26 @@
 # Paul's Cycling Dashboard
 
-A local web app that analyzes Paul Quakenbush's mountain-bike training and race
-prep for the DINO and Indiana NICA series. It pulls his Garmin rides live,
-computes real analytics from the raw power/HR streams, folds in Apple Watch
-recovery data, and refreshes itself every day at noon.
+A web app that analyzes Paul Quakenbush's mountain-bike training and race prep for
+the DINO and Indiana NICA series. It pulls his Garmin rides live, computes real
+analytics from the raw power/HR streams, folds in Apple Watch recovery data, and
+refreshes itself every day at noon. Pink/white theme inspired by his race jersey.
 
-**Open it at:** http://localhost:8777  (served always-on by launchd)
+**Live (hosted):** https://dennisjquakenbush.github.io/paul-cycling/
+**Local (always-on):** http://localhost:8777
+
+> Note: the hosted site is a **public** GitHub Pages URL - his name and training
+> data are visible to anyone with the link. Chosen deliberately; to make it private,
+> switch the repo to private and install the app from the local server instead.
+
+### Install it as an app (on his phone)
+Open the live URL in Safari (iPhone) or Chrome (Android) -> Share / menu ->
+**Add to Home Screen**. It installs as a standalone app with its own icon and works
+offline (last-synced data) thanks to the service worker.
+
+### Hosting / auto-publish
+GitHub Pages deploys from `web/` via `.github/workflows/pages.yml` on every push.
+The noon job commits the fresh `web/data.js` and pushes, so the hosted app updates
+daily on its own (controlled by `config.json` -> `publish_to_github`).
 
 ---
 

@@ -716,11 +716,14 @@
   /* ================= quality footer ================= */
   (function () {
     const q = D.data_quality;
+    const gen = new Date(D.generated_at);
     $("quality").innerHTML =
-      `Garmin: ${q.total_rides} rides (${q.rides_with_power} with power, ${q.rides_with_hr} with HR) from ${q.date_range[0]} to ${q.date_range[1]}.
+      `<div style="color:var(--accent);font-weight:700;margin-bottom:4px">Updates automatically every day at 12:30 PM</div>
+       Last updated ${gen.toLocaleString()}.<br>
+       Garmin: ${q.total_rides} rides (${q.rides_with_power} with power, ${q.rides_with_hr} with HR) from ${q.date_range[0]} to ${q.date_range[1]}.
        ${q.dropped_recording_errors} recording-error activities filtered out.
        Recovery source: ${q.recovery_source || "none yet - connect Apple Health"}.<br>
-       Generated ${new Date(D.generated_at).toLocaleString()} · analysis is informational, not a substitute for a coach or medical advice.`;
+       Analysis is informational, not a substitute for a coach or medical advice.`;
   })();
 
   /* ---- initial render, then reconcile excluded set from the best available source ---- */

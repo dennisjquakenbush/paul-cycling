@@ -1,7 +1,7 @@
 {
   "updated": "2026-07-13",
-  "category": "DINO Sport Men - age bracket 11-18 (the full Sport class, not the easier Junior category)",
-  "confidence_note": "Based on official DINO result fields. Paul has only ONE verified 2026 race (Winona Lake), so rivals are provisional until he races more rounds. Upcoming registration lists and his NICA category could not be accessed (both gated).",
+  "category": "DINO Expert (per family) - and likely NICA Varsity",
+  "confidence_note": "Category corrected by family: Paul races DINO EXPERT and probably NICA VARSITY. The chase/peers/aspirational names below were pulled from DINO SPORT-class results and are being re-verified against the Expert field - the Expert field is faster, so his real rivals will differ. Update pending.",
   "results": [
     {"race": "Winona Lake", "date": "2026-05-16", "place": "17th of 41 overall / 5th in 11-18", "time": "1:47:31", "confidence": "high"},
     {"race": "Brown County / Potato Creek / Muscatatuck", "date": "", "place": "Not in Sport Men results", "time": "", "confidence": "high"}
@@ -24,7 +24,7 @@
     {"name": "Vinson Senefeld", "detail": "16, Whitestown. Leads DINO Junior 15-18 standings."}
   ],
   "upcoming": "Registration entry lists for Southwestway Park (Aug 16, DINO) and the Stoney Run NICA opener (Aug 29-30) are not public - both are behind logins. Check the start lists the week of each race.",
-  "nica": "Indiana NICA races by grade + ability: Middle School -> Freshman -> Sophomore -> JV -> Varsity, with mid-season upgrades for top finishers. At 16 with his Sport-level speed, Paul is likely a Sophomore or upgraded JV rider - but his exact NICA category could not be verified (the NICA results site was blocked).",
+  "nica": "Paul races NICA VARSITY (per family) - the top ability tier. Indiana NICA structure: Middle School -> Freshman -> Sophomore -> JV -> Varsity. Varsity is the fastest high-school field, so his NICA rivals are the strongest juniors in the state.",
   "sources": [
     "https://runsignup.com/Series/dinomtbseriessportmen",
     "https://runsignup.com/Race/Results/177646",

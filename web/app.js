@@ -76,6 +76,48 @@
   $("subhead").textContent = `Mountain bike racer - DINO & Indiana NICA  ·  age ${p.age}  ·  ${Math.round(lbs(p.weight_kg))} lb`;
   $("stamp").innerHTML = `updated ${new Date(D.generated_at).toLocaleString()}<br>${D.data_quality.total_rides} rides analyzed`;
 
+  /* ================= install-as-app banner ================= */
+  (function () {
+    const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+    if (standalone) return;                                    // already installed
+    if (localStorage.getItem("install_dismissed") === "1") return;
+
+    const ua = navigator.userAgent || "";
+    const isIOS = /iphone|ipad|ipod/i.test(ua);
+    let deferred = null;
+
+    const bar = el("div", "installbar");
+    const mount = () => { const m = document.querySelector("main"); m.insertBefore(bar, m.firstChild); };
+    const dismiss = () => { bar.remove(); localStorage.setItem("install_dismissed", "1"); };
+
+    const build = (bodyHtml, withButton) => {
+      bar.innerHTML = `<span class="ib-ico"></span>
+        <div class="ib-txt">${bodyHtml}</div>
+        ${withButton ? '<button class="ib-btn">Install</button>' : ""}
+        <button class="ib-x" aria-label="dismiss">&times;</button>`;
+      bar.querySelector(".ib-x").addEventListener("click", dismiss);
+      if (withButton) bar.querySelector(".ib-btn").addEventListener("click", async () => {
+        if (!deferred) return;
+        deferred.prompt();
+        await deferred.userChoice;
+        deferred = null; dismiss();
+      });
+    };
+
+    if (isIOS) {
+      // iOS Safari has no install prompt - show the Add-to-Home-Screen steps
+      build("<b>Add Paul's dashboard to the Home Screen</b>Tap the Share button, then <b style='display:inline'>Add to Home Screen</b>.", false);
+      mount();
+    } else {
+      // Android / desktop Chrome-Edge: use the real install prompt when offered
+      window.addEventListener("beforeinstallprompt", (e) => {
+        e.preventDefault(); deferred = e;
+        build("<b>Install Paul's dashboard as an app</b>Own icon, full screen, works offline.", true);
+        mount();
+      });
+    }
+  })();
+
   /* ================= recovery dial (Tour-de-France style) ================= */
   (function () {
     const r = D.recovery_score, s = $("recoverydial");

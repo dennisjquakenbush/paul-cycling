@@ -22,7 +22,7 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; background: var(--bg); }
+html, body { margin: 0; padding: 0; background: var(--bg); overflow-x: hidden; }
 body {
   background:
     radial-gradient(1100px 520px at 88% -12%, #ffd9ef 0%, rgba(255,217,239,0) 60%),
@@ -190,6 +190,23 @@ svg { display: block; width: 100%; height: auto; overflow: visible; }
 
 footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 8px; line-height: 1.7; }
 footer a { color: var(--accent); }
+
+/* install-as-app banner */
+.installbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: linear-gradient(135deg, #fce0f0, #f3e4ff); border: 1px solid var(--line-2);
+  border-radius: 14px; padding: 12px 14px; margin-bottom: 16px; box-shadow: var(--shadow); }
+.installbar .ib-ico { width: 34px; height: 34px; border-radius: 9px; flex: none;
+  background: linear-gradient(135deg, var(--accent), var(--lilac)); position: relative; }
+.installbar .ib-ico::after { content: ""; position: absolute; inset: 0; border-radius: 9px;
+  background: radial-gradient(circle at 34% 50%, #fff 3.5px, transparent 4.5px),
+              radial-gradient(circle at 66% 50%, #fff 3.5px, transparent 4.5px); }
+.installbar .ib-txt { flex: 1; min-width: 150px; font-size: 13px; color: #5a4a55; }
+.installbar .ib-txt b { color: var(--text); display: block; font-size: 14px; margin-bottom: 1px; }
+.installbar .ib-btn { background: var(--accent); color: #fff; border: none; border-radius: 999px;
+  padding: 9px 16px; font-size: 14px; font-weight: 700; cursor: pointer; }
+.installbar .ib-btn:active { opacity: .85; }
+.installbar .ib-x { background: none; border: none; color: var(--muted); font-size: 20px;
+  cursor: pointer; padding: 0 4px; line-height: 1; }
 
 /* recovery dial */
 .dial-wrap { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }

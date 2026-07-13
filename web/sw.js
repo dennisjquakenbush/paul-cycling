@@ -1,7 +1,7 @@
 /* Service worker: makes the dashboard installable and usable offline.
-   Network-first for data.js (so it shows the latest daily analysis when online),
-   cache-first for the static shell. */
-const CACHE = "paul-mtb-v1";
+   Network-first for everything (so shell + data updates show immediately when
+   online), falling back to the cache only when offline. */
+const CACHE = "paul-mtb-v2";
 const SHELL = ["./index.html", "./style.css", "./app.js", "./manifest.webmanifest",
   "./icon-192.png", "./icon-512.png"];
 
@@ -20,18 +20,13 @@ self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
   if (url.pathname.endsWith("/api/config")) return; // never cache the config API
 
-  const isData = url.pathname.endsWith("data.js");
-  if (isData) {
-    // network-first: freshest analysis when online, cached copy when offline
-    e.respondWith(
-      fetch(e.request).then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, copy));
-        return res;
-      }).catch(() => caches.match(e.request))
-    );
-  } else {
-    // cache-first for the static shell
-    e.respondWith(caches.match(e.request).then((r) => r || fetch(e.request)));
-  }
+  // network-first for everything: keep a fresh copy when online, fall back to
+  // cache only when the network is unavailable (offline install still works).
+  e.respondWith(
+    fetch(e.request).then((res) => {
+      const copy = res.clone();
+      caches.open(CACHE).then((c) => c.put(e.request, copy));
+      return res;
+    }).catch(() => caches.match(e.request))
+  );
 });

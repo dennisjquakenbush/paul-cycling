@@ -95,28 +95,6 @@
     }
   })();
 
-  /* ================= coaching brief ================= */
-  (function () {
-    const c = D.coaching, s = $("coaching");
-    if (!c) { s.style.display = "none"; return; }
-    s.appendChild(header("thisweek", "This week <span class='sub'>&mdash; the plan</span>"));
-    const hl = el("div");
-    hl.style.cssText = "font-size:16px;font-weight:600;color:var(--text);margin-bottom:14px;line-height:1.45";
-    hl.textContent = c.headline;
-    s.appendChild(hl);
-    const wrap = el("div");
-    wrap.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px";
-    (c.plan || []).forEach(([day, what]) => {
-      const d = el("div");
-      d.style.cssText = "background:rgba(255,255,255,.02);border:1px solid var(--line);border-radius:10px;padding:11px 13px";
-      d.innerHTML = `<div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-bottom:5px">${day}</div>
-        <div style="font-size:13px;color:#cbd5e1;line-height:1.4">${what}</div>`;
-      wrap.appendChild(d);
-    });
-    s.appendChild(wrap);
-    (c.notes || []).forEach(n => s.appendChild(el("div", "note", n)));
-  })();
-
   /* ================= fitness ================= */
   (function () {
     const f = D.fitness, s = $("fitness");

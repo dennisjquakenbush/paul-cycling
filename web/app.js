@@ -46,6 +46,15 @@
     calendar: "The DINO and NICA races. Turn a race off with the switch if he is not doing it - the next-race and taper advice update to match.",
     thisweek: "A suggested week of training shaped by his current form, how fast he is ramping, and the next race. A smart default, not a fixed prescription.",
     riders: "Riders from official DINO results to train with and race against. Based on the rounds Paul has actually raced, so it sharpens as the season goes on.",
+    cp: "Critical Power: the highest power he could hold almost indefinitely, found by fitting the physics of his best efforts (work = CP x time + W'). A more precise threshold than the 20-minute FTP, especially for a punchy rider.",
+    wprime: "W' (W-prime): his anaerobic 'battery' in kilojoules - the finite energy he can spend ABOVE critical power on sprints and steep climbs before it runs dry. A big W' means a strong repeatable punch.",
+    ef: "Efficiency Factor = Normalized Power divided by average heart rate. More watts per heartbeat means a fitter aerobic engine. Watch the trend, not the single number.",
+    vi: "Variability Index = Normalized Power divided by average power. Near 1.0 is smooth and steady; higher means spiky, stop-start riding - which is exactly what mountain-bike racing demands.",
+    monotony: "Training monotony (Foster) = how similar every day's load is. High monotony with high total load is a classic overtraining/illness warning. Contrast - easy days easy, hard days hard - is healthier.",
+    durability: "Fatigue resistance: how little his power fades from the first quarter to the last quarter of long rides. 100 means no fade - he's as strong late as early, which wins the back half of races.",
+    decoupling: "Aerobic decoupling: how much power and heart rate drift apart over a ride. Under 5% is strong aerobic durability.",
+    brain: "How the dashboard thinks: raw data on the left feeds the models in the middle, which combine into the recovery and readiness estimates on the right.",
+    kj: "Total mechanical work he's produced this season, in kilojoules (roughly also the food calories burned pedaling).",
   };
   // shared bottom toast for phone tooltips (never clips off-screen)
   let toastEl = null;
@@ -334,6 +343,138 @@
        <span><i style="background:var(--pink)"></i>Fatigue (ATL)</span>
        <span><i style="background:var(--green)"></i>Form +ve (fresh)</span>
        <span><i style="background:var(--pink);opacity:.5"></i>Form -ve (tired)</span>`));
+  })();
+
+  /* ================= advanced metrics ================= */
+  (function () {
+    const m = D.models, s = $("advanced");
+    if (!m) { s.style.display = "none"; return; }
+    s.appendChild(header("cp", "Advanced metrics <span class='sub'>&mdash; the deeper models</span>"));
+    const g = el("div", "stats"); g.style.gridTemplateColumns = "repeat(auto-fit, minmax(150px, 1fr))";
+    const stat = (n, l, key) => { const d = el("div", "stat"); d.appendChild(el("div", "n", n));
+      const lab = el("div", "l"); lab.appendChild(document.createTextNode(l)); const t = tip(key); if (t) lab.appendChild(t);
+      d.appendChild(lab); return d; };
+
+    const cp = m.critical_power;
+    if (cp) {
+      g.appendChild(stat(`${cp.cp}<small> W</small>`, "Critical Power", "cp"));
+      g.appendChild(stat(`${cp.w_prime_kj}<small> kJ</small>`, "W' (anaerobic battery)", "wprime"));
+    }
+    const ef = m.efficiency_factor;
+    if (ef && ef.latest) {
+      const tr = ef.trend_pct == null ? "" : ` <small style="color:${ef.trend_pct >= 0 ? 'var(--green)' : 'var(--amber)'}">${ef.trend_pct > 0 ? '+' : ''}${ef.trend_pct}%</small>`;
+      g.appendChild(stat(`${ef.latest}${tr}`, "Efficiency Factor", "ef"));
+    }
+    if (m.durability) g.appendChild(stat(`${m.durability.score}<small>/100</small>`, "Durability", "durability"));
+    if (m.variability_index) g.appendChild(stat(`${m.variability_index.season_median}`, "Variability Index", "vi"));
+    if (m.decoupling) g.appendChild(stat(`${m.decoupling.median}<small>%</small>`, "Aerobic decoupling", "decoupling"));
+    const ms = m.monotony_strain;
+    if (ms && ms.monotony != null) g.appendChild(stat(`${ms.monotony}`, "Training monotony", "monotony"));
+    if (m.season_kj) g.appendChild(stat(`${(m.season_kj / 1000).toFixed(1)}<small> MJ</small>`, "Season work", "kj"));
+    s.appendChild(g);
+
+    if (cp) {
+      const note = el("div", "note");
+      const conf = cp.r2 != null ? `The model fits his efforts at R&sup2;=${cp.r2} (1.0 is perfect).` : "";
+      note.innerHTML = `Critical Power is <strong style="color:var(--accent)">${cp.cp} W (${cp.cp_wkg} W/kg)</strong> with a W' of ${cp.w_prime_kj} kJ. ${conf} ` +
+        `From this model he can sustain about <strong>${cp.predict['45min']} W</strong> for a 45-min race and <strong>${cp.predict['75min']} W</strong> for 75 min.`;
+      s.appendChild(note);
+    }
+    if (ms && ms.high_risk) {
+      const w = el("div", "flag");
+      w.innerHTML = `<strong>Load watch:</strong> training monotony is high (${ms.monotony}) with strain ${ms.strain} - add contrast (easier easy days) to cut illness/overtraining risk.`;
+      s.appendChild(w);
+    }
+  })();
+
+  /* ================= brain / model map ================= */
+  (function () {
+    const m = D.models, s = $("brain");
+    s.appendChild(header("brain", "How it works <span class='sub'>&mdash; the model behind the numbers</span>"));
+
+    const cp = m && m.critical_power;
+    const pmc = D.pmc[D.pmc.length - 1] || {};
+    const rec = D.recovery_score || {};
+    const rd = D.readiness || {};
+    const q = D.data_quality;
+    const nr = (D.coaching && D.coaching.next_race) || null;
+
+    // node value helpers
+    const val = {
+      rides: `${q.total_rides} rides`,
+      power: `${q.rides_with_power} w/ power`,
+      hr: `${q.rides_with_hr} w/ HR`,
+      watch: D.recovery && D.recovery.source ? `HRV ${D.recovery.latest.hrv ?? '-'} · RHR ${D.recovery.latest.resting_hr ?? '-'}` : "connect",
+      cp: cp ? `${cp.cp} W · ${cp.w_prime_kj} kJ` : "-",
+      tss: `${(D.weekly_tss.slice(-1)[0] || {}).tss ?? '-'} this wk`,
+      ef: m && m.efficiency_factor && m.efficiency_factor.latest ? `EF ${m.efficiency_factor.latest}` : "-",
+      dec: m && m.decoupling ? `${m.decoupling.median}%` : "-",
+      pmc: `CTL ${pmc.ctl} · TSB ${pmc.tsb}`,
+      mono: m && m.monotony_strain && m.monotony_strain.monotony != null ? `mono ${m.monotony_strain.monotony}` : "-",
+      recov: `${rec.score ?? '-'}/100 ${rec.band || ''}`,
+      ready: rd.verdict || "-",
+      race: cp ? `~${cp.predict['45min']} W / 45min` : "-",
+      plan: nr ? `${nr.name.split(' ')[0]} ${nr.days_out}d` : "-",
+    };
+
+    // layout: 3 columns of nodes on a fixed canvas (scrolls on phone)
+    const W = 900, H = 560, NW = 168, NH = 50;
+    const col = [40, 366, 692];
+    const N = {
+      rides:  { x: col[0], y: 40,  t: "Garmin rides", v: val.rides, g: "in" },
+      power:  { x: col[0], y: 150, t: "Power streams", v: val.power, g: "in" },
+      hr:     { x: col[0], y: 260, t: "Heart rate", v: val.hr, g: "in" },
+      watch:  { x: col[0], y: 400, t: "Apple Watch", v: val.watch, g: "in" },
+      cp:     { x: col[1], y: 20,  t: "Critical Power / W'", v: val.cp, g: "eng" },
+      tss:    { x: col[1], y: 100, t: "Training load (TSS)", v: val.tss, g: "eng" },
+      ef:     { x: col[1], y: 180, t: "Efficiency Factor", v: val.ef, g: "eng" },
+      dec:    { x: col[1], y: 260, t: "Decoupling", v: val.dec, g: "eng" },
+      pmc:    { x: col[1], y: 360, t: "Fitness/Fatigue/Form", v: val.pmc, g: "eng" },
+      mono:   { x: col[1], y: 460, t: "Monotony / Strain", v: val.mono, g: "eng" },
+      recov:  { x: col[2], y: 120, t: "Recovery score", v: val.recov, g: "out" },
+      ready:  { x: col[2], y: 220, t: "Readiness", v: val.ready, g: "out" },
+      race:   { x: col[2], y: 330, t: "Race prediction", v: val.race, g: "out" },
+      plan:   { x: col[2], y: 430, t: "This week's plan", v: val.plan, g: "out" },
+    };
+    const edges = [
+      ["rides", "power"], ["rides", "hr"],
+      ["power", "cp"], ["power", "tss"], ["power", "ef"], ["power", "dec"],
+      ["hr", "tss"], ["hr", "ef"], ["hr", "dec"],
+      ["tss", "pmc"], ["tss", "mono"],
+      ["pmc", "recov"], ["watch", "recov"],
+      ["recov", "ready"], ["cp", "race"], ["ready", "plan"],
+    ];
+    const colors = { in: "var(--blue)", eng: "var(--accent)", out: "var(--green)" };
+    const fill = { in: "#eef1fe", eng: "#fce0f0", out: "#e6f6ee" };
+
+    const g = svg(W, H);
+    // fixed pixel size (override the global svg{width:100%}) so text stays legible
+    // and the diagram scrolls horizontally on phones instead of shrinking.
+    g.style.width = W + "px"; g.style.height = H + "px"; g.style.maxWidth = "none";
+    // edges first (behind nodes)
+    edges.forEach(([a, b]) => {
+      const A = N[a], B = N[b];
+      const x1 = A.x + NW, y1 = A.y + NH / 2, x2 = B.x, y2 = B.y + NH / 2;
+      const mx = (x1 + x2) / 2;
+      g.appendChild(node("path", { d: `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`,
+        fill: "none", stroke: "var(--line-2)", "stroke-width": 1.6 }));
+    });
+    // nodes
+    Object.values(N).forEach(nd => {
+      g.appendChild(node("rect", { x: nd.x, y: nd.y, width: NW, height: NH, rx: 11,
+        fill: fill[nd.g], stroke: colors[nd.g], "stroke-width": 1.5 }));
+      g.appendChild(node("text", { x: nd.x + 12, y: nd.y + 20, "font-size": 13, "font-weight": 700, fill: "var(--text)" }, nd.t));
+      g.appendChild(node("text", { x: nd.x + 12, y: nd.y + 38, "font-size": 12, fill: colors[nd.g] }, nd.v));
+    });
+    // column captions
+    [["Inputs", col[0]], ["Models", col[1]], ["Outputs", col[2]]].forEach(([t, x]) => {
+      g.appendChild(node("text", { x: x + NW / 2, y: H - 8, "text-anchor": "middle", "font-size": 12,
+        "font-weight": 700, fill: "var(--muted)", "letter-spacing": ".05em" }, t.toUpperCase()));
+    });
+
+    const wrap = el("div", "tbl-wrap"); wrap.appendChild(g);
+    s.appendChild(wrap);
+    s.appendChild(el("div", "note", "Data on the left (his rides and Apple Watch) feeds the models in the middle, which combine into the recovery and readiness estimates on the right. Every number updates together each day."));
   })();
 
   /* ================= time in zone ================= */

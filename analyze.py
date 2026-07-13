@@ -20,6 +20,7 @@ weight on sleep/recovery, no restrictive fueling logic.
 import json
 import math
 import os
+import statistics
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
@@ -369,6 +370,176 @@ def weekly_tss(series):
         monday = d - timedelta(days=d.weekday())
         weeks[monday.isoformat()] += pt["tss"]
     return [{"week": k, "tss": round(v)} for k, v in sorted(weeks.items())]
+
+
+# --------------------------------------------------------------------------- #
+# advanced models - the deeper math
+# --------------------------------------------------------------------------- #
+
+# durations (s) for the mean-maximal-power sweep used by the Critical Power fit
+CP_DURATIONS = [120, 180, 240, 300, 420, 480, 600, 720, 900, 1200]
+
+
+def season_mmp(rides_raw, durations):
+    """Best mean-maximal power at each duration across every ride's power stream."""
+    out = {}
+    for d in durations:
+        best = None
+        for a in rides_raw:
+            s = a.get("streams") or {}
+            p = s.get("power")
+            if not p:
+                continue
+            v = rolling_best(p, d, sample_dt(s))
+            if v and (best is None or v > best):
+                best = v
+        out[d] = best
+    return out
+
+
+def fit_critical_power(mmp, weight):
+    """
+    Fit the 2-parameter Critical Power model to maximal efforts:
+        work(t) = CP * t + W'         (linear in t, since work = power * time)
+    CP (watts) is the asymptote of sustainable power; W' (joules) is the finite
+    anaerobic work capacity above CP - his 'matchbook' for surges and climbs.
+    Fit by ordinary least squares on the 2-20 min efforts; report R^2 as the
+    goodness of fit (how cleanly his efforts obey the model).
+    """
+    pts = [(t, w) for t, w in sorted(mmp.items()) if w and 120 <= t <= 1200]
+    if len(pts) < 3:
+        return None
+    xs = [t for t, _ in pts]
+    ys = [w * t for t, w in pts]            # work = power * time
+    n = len(xs)
+    sx, sy = sum(xs), sum(ys)
+    sxx = sum(x * x for x in xs)
+    sxy = sum(x * y for x, y in zip(xs, ys))
+    denom = n * sxx - sx * sx
+    if denom == 0:
+        return None
+    cp = (n * sxy - sx * sy) / denom        # slope
+    wprime = (sy - cp * sx) / n             # intercept
+    ybar = sy / n
+    ss_tot = sum((y - ybar) ** 2 for y in ys)
+    ss_res = sum((y - (cp * x + wprime)) ** 2 for x, y in zip(xs, ys))
+    r2 = 1 - ss_res / ss_tot if ss_tot > 0 else None
+    if cp <= 0 or wprime <= 0:
+        return None
+    return {
+        "cp": round(cp), "cp_wkg": round(cp / weight, 2) if weight else None,
+        "w_prime_j": round(wprime), "w_prime_kj": round(wprime / 1000, 1),
+        "r2": round(r2, 3) if r2 is not None else None,
+        "points": [{"secs": t, "watts": round(w)} for t, w in pts],
+        # CP-model prediction of sustainable power for a race of length T
+        "predict": {
+            "20min": round(cp + wprime / 1200),
+            "45min": round(cp + wprime / 2700),
+            "75min": round(cp + wprime / 4500),
+        },
+    }
+
+
+def efficiency_factor(rides):
+    """
+    Efficiency Factor (EF) = Normalized Power / average HR on aerobic rides.
+    Rising EF over weeks = the aerobic engine is getting stronger (more watts per
+    heartbeat). A clean, HR-based fitness signal independent of how hard he rode.
+    """
+    pts = []
+    for r in sorted(rides, key=lambda x: x["date"]):
+        if r.get("np") and r.get("avg_hr") and (r["duration_s"] or 0) >= 1500:
+            pts.append({"date": r["date"], "ef": round(r["np"] / r["avg_hr"], 3)})
+    if len(pts) < 4:
+        return {"points": pts, "trend_pct": None}
+    recent = [p["ef"] for p in pts[-4:]]
+    prior = [p["ef"] for p in pts[-8:-4]] or [p["ef"] for p in pts[:-4]]
+    tr = None
+    if prior:
+        tr = round((statistics.mean(recent) - statistics.mean(prior)) / statistics.mean(prior) * 100, 1)
+    return {"points": pts, "trend_pct": tr, "latest": pts[-1]["ef"]}
+
+
+def variability_index(rides):
+    """VI = NP / average power. ~1.0 = steady (TT-like); high = punchy/stochastic
+    (MTB racing). Tells us how spiky his riding is, which drives W' usage."""
+    vis = []
+    for r in rides:
+        if r.get("np") and r.get("avg_power") and r["avg_power"] > 0:
+            vis.append(r["np"] / r["avg_power"])
+    if not vis:
+        return None
+    return {"season_median": round(statistics.median(vis), 2),
+            "highest": round(max(vis), 2)}
+
+
+def monotony_strain(daily_series):
+    """
+    Foster's training monotony & strain from daily load (last 7 days):
+        monotony = mean(daily TSS) / stdev(daily TSS)
+        strain   = weekly load * monotony
+    High monotony (>2) means every day looks the same (no easy/hard contrast),
+    which - especially with high strain - is a classic illness/overtraining flag.
+    """
+    if len(daily_series) < 7:
+        return None
+    last7 = [p["tss"] for p in daily_series[-7:]]
+    mean = statistics.mean(last7)
+    sd = statistics.pstdev(last7)
+    if sd < 1e-6:
+        monotony = None if mean == 0 else 3.0   # all-same nonzero days = very monotonous
+    else:
+        monotony = mean / sd
+    weekly = sum(last7)
+    strain = weekly * monotony if monotony else None
+    flag = monotony is not None and monotony > 2.0
+    return {"monotony": round(monotony, 2) if monotony else None,
+            "weekly_load": round(weekly),
+            "strain": round(strain) if strain else None,
+            "high_risk": flag}
+
+
+def durability(rides):
+    """
+    Fatigue resistance: on long rides (>=90 min), how much power fades from the
+    first to the last quarter (Pw drop %). Lower fade = more durable = wins races
+    in the back half. Reported as a 0-100 durability score (100 = no fade).
+    """
+    fades = [r["power_fade"] for r in rides
+             if r.get("power_fade") is not None and (r["duration_s"] or 0) >= 5400]
+    if not fades:
+        return None
+    avg_fade = statistics.mean(fades)
+    return {"avg_fade_pct": round(avg_fade, 1),
+            "score": int(max(0, min(100, round(100 - avg_fade)))),
+            "n_rides": len(fades)}
+
+
+def season_decoupling(rides):
+    decs = [r["decoupling"] for r in rides
+            if r.get("decoupling") is not None and (r["duration_s"] or 0) >= 2700]
+    if not decs:
+        return None
+    return {"median": round(statistics.median(decs), 1), "n": len(decs)}
+
+
+def build_models(rides, rides_raw, weight, daily_series):
+    mmp = season_mmp(rides_raw, CP_DURATIONS)
+    total_kj = 0.0
+    for a in rides_raw:
+        s = a.get("streams") or {}
+        p = [x for x in (s.get("power") or []) if x]
+        if p:
+            total_kj += sum(p) * sample_dt(s) / 1000
+    return {
+        "critical_power": fit_critical_power(mmp, weight),
+        "efficiency_factor": efficiency_factor(rides),
+        "variability_index": variability_index(rides),
+        "monotony_strain": monotony_strain(daily_series),
+        "durability": durability(rides),
+        "decoupling": season_decoupling(rides),
+        "season_kj": round(total_kj),
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -786,6 +957,7 @@ def main():
     rscore = recovery_score(pmc_series, recovery)
     brief = coaching_brief(pmc_series, ready, ftp, ftp_info, tiz, recovery, excluded)
     fuel = fueling(weight, pmc_series)
+    models = build_models(rides, rides_raw, weight, series)
 
     # max HR seen (for HR-zone context)
     max_hr = max((r["max_hr"] for r in rides if r["max_hr"]), default=None)
@@ -822,6 +994,7 @@ def main():
         "readiness": ready,
         "recovery_score": rscore,
         "coaching": brief,
+        "models": models,
         "fueling": fuel,
         "race_calendar": [{"date": d, "name": n, "series": s} for d, n, s in RACE_CALENDAR],
         "excluded_races": excluded,

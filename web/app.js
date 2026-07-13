@@ -53,8 +53,12 @@
     monotony: "Training monotony (Foster) = how similar every day's load is. High monotony with high total load is a classic overtraining/illness warning. Contrast - easy days easy, hard days hard - is healthier.",
     durability: "Fatigue resistance: how little his power fades from the first quarter to the last quarter of long rides. 100 means no fade - he's as strong late as early, which wins the back half of races.",
     decoupling: "Aerobic decoupling: how much power and heart rate drift apart over a ride. Under 5% is strong aerobic durability.",
-    brain: "How the dashboard thinks: raw data on the left feeds the models in the middle, which combine into the recovery and readiness estimates on the right.",
     kj: "Total mechanical work he's produced this season, in kilojoules (roughly also the food calories burned pedaling).",
+    grit: "Garmin's Grit: how physically demanding the terrain is (steepness, roughness). Higher = harder trail. Riding higher-Grit trails is race-specific prep.",
+    flow: "Garmin's Flow: how smoothly he descends - it measures braking and speed changes, so LOWER is smoother and faster. Improving Flow is free speed in a race.",
+    heat: "Average of each ride's high temperature over the last 30 days. Training in the heat builds tolerance that pays off on a hot race day.",
+    climb: "Total vertical climbing this season, in feet - a measure of how much elevation work he's put in.",
+    cadence: "Average pedaling cadence (revolutions per minute) across his rides.",
   };
   // shared bottom toast for phone tooltips (never clips off-screen)
   let toastEl = null;
@@ -370,6 +374,13 @@
     if (m.decoupling) g.appendChild(stat(`${m.decoupling.median}<small>%</small>`, "Aerobic decoupling", "decoupling"));
     const ms = m.monotony_strain;
     if (ms && ms.monotony != null) g.appendChild(stat(`${ms.monotony}`, "Training monotony", "monotony"));
+    const sk = m.mtb_skills;
+    if (sk && sk.grit_recent != null) g.appendChild(stat(`${sk.grit_recent}`, "Grit (trail difficulty)", "grit"));
+    if (sk && sk.flow_recent != null) g.appendChild(stat(`${sk.flow_recent}`, "Flow (descending)", "flow"));
+    const heat = m.heat;
+    if (heat) g.appendChild(stat(`${heat.avg_max_f}<small> F</small>`, "Avg ride heat (30d)", "heat"));
+    if (m.climbing && m.climbing.season_climb_ft) g.appendChild(stat(`${(m.climbing.season_climb_ft / 1000).toFixed(0)}k<small> ft</small>`, "Season climbing", "climb"));
+    if (m.climbing && m.climbing.avg_cadence) g.appendChild(stat(`${m.climbing.avg_cadence}<small> rpm</small>`, "Avg cadence", "cadence"));
     if (m.season_kj) g.appendChild(stat(`${(m.season_kj / 1000).toFixed(1)}<small> MJ</small>`, "Season work", "kj"));
     s.appendChild(g);
 

@@ -113,12 +113,24 @@ def pull_activities():
             "avg_hr": a.get("averageHR"),
             "max_hr": a.get("maxHR"),
             "avg_cad": a.get("averageBikingCadenceInRevPerMinute"),
+            "max_cad": a.get("maxBikingCadenceInRevPerMinute"),
             "avg_speed_mps": a.get("averageSpeed"),
             "calories": a.get("calories"),
             "tss_garmin": a.get("trainingStressScore"),
             "if_garmin": a.get("intensityFactor"),
+            "np_garmin": a.get("normPower"),
             "location": a.get("locationName"),
             "is_cycling": tkey in CYCLING_TYPES,
+            # MTB-specific + environment, straight from Garmin's summary
+            "grit": a.get("grit"),
+            "flow": a.get("avgFlow"),
+            "elev_loss_m": a.get("elevationLoss"),
+            "min_temp_c": a.get("minTemperature"),
+            "max_temp_c": a.get("maxTemperature"),
+            # Garmin's own best mean-maximal power at standard durations (seconds)
+            "mmp": {str(s): a.get(f"maxAvgPower_{s}")
+                    for s in (1, 2, 5, 10, 20, 30, 60, 120, 300, 600, 1200, 1800, 3600, 7200)
+                    if a.get(f"maxAvgPower_{s}") is not None},
         }
         if summ["is_cycling"]:
             try:

@@ -119,6 +119,9 @@ def ride_metrics(a, ftp):
         "duration_s": a.get("duration_s") or 0,
         "distance_km": round((a.get("distance_m") or 0) / 1000, 2),
         "elev_gain_m": round(a.get("elev_gain_m") or 0),
+        "grit": a.get("grit"), "flow": a.get("flow"),
+        "max_temp_c": a.get("max_temp_c"), "min_temp_c": a.get("min_temp_c"),
+        "avg_cad": a.get("avg_cad"), "mmp_garmin": a.get("mmp") or {},
         "has_power": has_power, "has_hr": has_hr,
         "avg_power": round(sum(pvals) / len(pvals), 1) if has_power else None,
         "max_power": round(max(pvals), 1) if has_power else None,
@@ -523,8 +526,80 @@ def season_decoupling(rides):
     return {"median": round(statistics.median(decs), 1), "n": len(decs)}
 
 
+def mtb_skills(rides):
+    """
+    Garmin's Grit (how demanding the terrain is) and Flow (how smoothly he descends
+    - lower is smoother). Trends tell us if he's riding harder trails and getting
+    slicker on the descents, where MTB races are often won or lost.
+    """
+    def series(field):
+        return [(r["date"], r[field]) for r in sorted(rides, key=lambda x: x["date"])
+                if r.get(field) is not None and r["type"] == "mountain_biking"]
+    grit = series("grit")
+    flow = series("flow")
+    if not grit:
+        return None
+
+    def recent_prior(pts):
+        if len(pts) < 6:
+            return (round(statistics.mean(v for _, v in pts), 1) if pts else None, None)
+        r = statistics.mean(v for _, v in pts[-5:])
+        p = statistics.mean(v for _, v in pts[-10:-5])
+        return round(r, 1), round(r - p, 1)
+
+    g_avg, g_tr = recent_prior(grit)
+    f_avg, f_tr = recent_prior(flow)
+    return {"grit_recent": g_avg, "grit_trend": g_tr,
+            "flow_recent": f_avg, "flow_trend": f_tr,
+            "grit_max": round(max(v for _, v in grit), 1)}
+
+
+def heat_exposure(rides):
+    """
+    Heat adaptation from ride temperatures (F). Racing/training in the heat builds
+    tolerance; if his recent rides are hot he'll cope better on a hot race day, and
+    his fueling/hydration plan should assume it.
+    """
+    cutoff = (date.today() - timedelta(days=30)).isoformat()
+    temps = [r["max_temp_c"] for r in rides
+             if r.get("max_temp_c") is not None and r["date"] >= cutoff]
+    if not temps:
+        return None
+    hot = sum(1 for t in temps if t >= 25)       # >=77F
+    very_hot = sum(1 for t in temps if t >= 30)   # >=86F
+    frac = hot / len(temps)
+    adapted = frac >= 0.5
+    return {"rides_30d": len(temps),
+            "avg_max_f": round(statistics.mean(temps) * 9 / 5 + 32),
+            "hottest_f": round(max(temps) * 9 / 5 + 32),
+            "hot_ride_pct": round(frac * 100),
+            "very_hot_rides": very_hot,
+            "heat_adapted": adapted}
+
+
+def climbing_cadence(rides):
+    total_gain_m = sum(r.get("elev_gain_m") or 0 for r in rides)
+    cads = [r["avg_cad"] for r in rides if r.get("avg_cad")]
+    biggest = max((r.get("elev_gain_m") or 0 for r in rides), default=0)
+    return {"season_climb_ft": round(total_gain_m * 3.28084),
+            "biggest_ride_ft": round(biggest * 3.28084),
+            "avg_cadence": round(statistics.mean(cads)) if cads else None}
+
+
+def season_mmp_garmin(rides, durations):
+    """Season-best mean-maximal power using Garmin's own per-ride numbers (more
+    reliable than re-deriving from streams, and covers more durations)."""
+    out = {}
+    for d in durations:
+        vals = [r["mmp_garmin"].get(str(d)) for r in rides if r.get("mmp_garmin", {}).get(str(d))]
+        if vals:
+            out[d] = max(vals)
+    return out
+
+
 def build_models(rides, rides_raw, weight, daily_series):
-    mmp = season_mmp(rides_raw, CP_DURATIONS)
+    # prefer Garmin's own per-ride power curve for the CP fit; fall back to streams
+    mmp = season_mmp_garmin(rides, CP_DURATIONS) or season_mmp(rides_raw, CP_DURATIONS)
     total_kj = 0.0
     for a in rides_raw:
         s = a.get("streams") or {}
@@ -538,6 +613,9 @@ def build_models(rides, rides_raw, weight, daily_series):
         "monotony_strain": monotony_strain(daily_series),
         "durability": durability(rides),
         "decoupling": season_decoupling(rides),
+        "mtb_skills": mtb_skills(rides),
+        "heat": heat_exposure(rides),
+        "climbing": climbing_cadence(rides),
         "season_kj": round(total_kj),
     }
 
@@ -938,7 +1016,32 @@ def synthesize(pmc_series, models, recovery, ftp, ftp_info, tiz, nr, weight):
             out.append({"title": "Push the easy days easier", "tone": "watch",
                         "text": f"Only {round(easy)}% of riding time is truly easy; too much sits in the tempo 'grey zone'. Slowing the easy rides down would let the hard days be harder and sharpen his top end."})
 
-    # 6) Race outlook: TSB + days to race + recovery + CP prediction
+    # 6) Heat adaptation -> race-day plan
+    heat = m.get("heat")
+    if heat and heat.get("rides_30d", 0) >= 4:
+        if heat["heat_adapted"]:
+            out.append({"title": "He's heat-adapted right now", "tone": "good",
+                        "text": f"{heat['hot_ride_pct']}% of his rides in the last month topped 77 F (avg high {heat['avg_max_f']} F, hottest {heat['hottest_f']} F). "
+                                "That earned heat tolerance is a real edge on a hot race day - but keep hydration/sodium high to hold it, since the adaptation fades in about 2-3 weeks off the heat."})
+        else:
+            out.append({"title": "Not much recent heat exposure", "tone": "info",
+                        "text": f"Only {heat['hot_ride_pct']}% of recent rides were hot. If a race day looks hot, expect some power loss and plan a couple of deliberately warm rides in the 10 days before to adapt."})
+
+    # 7) MTB skills: Grit + Flow
+    sk = m.get("mtb_skills")
+    if sk and sk.get("grit_recent") is not None:
+        bits = f"riding terrain around Grit {sk['grit_recent']}"
+        if sk.get("flow_recent") is not None:
+            bits += f" with a Flow of {sk['flow_recent']} (lower is smoother)"
+        trend_txt = ""
+        if sk.get("flow_trend") is not None and sk["flow_trend"] < -0.3:
+            trend_txt = " His descending is getting smoother, which is free speed in a race."
+        elif sk.get("grit_trend") is not None and sk["grit_trend"] > 5:
+            trend_txt = " He's been on harder, more technical trails lately - good race-specific prep."
+        out.append({"title": "Technical riding is race-specific", "tone": "info",
+                    "text": f"He's {bits}.{trend_txt} For a fitness-strong rider, sharper descending and line choice is often where the easy time gains are."})
+
+    # 8) Race outlook: TSB + days to race + recovery + CP prediction
     if nr and cp:
         d = nr["days_out"]
         window = ("time to build then taper" if d > 14 else "into the taper now - hold intensity, cut volume")
@@ -946,7 +1049,7 @@ def synthesize(pmc_series, models, recovery, ftp, ftp_info, tiz, nr, weight):
                     "text": f"He's carrying fitness of {pmc['ctl']} (CTL) with form at {pmc['tsb']}. With {d} days out there's {window}. "
                             f"The Critical Power model projects he can hold about {cp['predict']['45min']} W for a 45-minute race - build the plan around defending that number on the climbs."})
 
-    return out[:6]
+    return out[:8]
 
 
 def readiness(pmc_series, recovery):

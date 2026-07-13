@@ -702,6 +702,59 @@ def load_riders():
         return None
 
 
+# venue coordinates for race-day weather
+VENUE_COORDS = {
+    "Winona Lake": (41.33, -85.83),
+    "Brown County SP": (39.19, -86.23),
+    "Potato Creek SP": (41.55, -86.35),
+    "Muscatatuck Park": (39.00, -85.62),
+    "Griffin Bike Park": (39.42, -87.31),
+    "Southwestway Park": (39.664, -86.269),
+    "Stoney Run, Hebron": (41.35, -87.16),
+}
+
+FORECAST_WINDOW_DAYS = 16
+
+
+def race_weather(nr):
+    """
+    Forecast + auto-derived pacing/fueling adjustments for the next race, once it's
+    inside the ~16-day forecast window. Returns a status so the dashboard can show
+    a 'closer to race day' placeholder until then.
+    """
+    if not nr:
+        return None
+    if nr["days_out"] < 0 or nr["days_out"] > FORECAST_WINDOW_DAYS:
+        return {"status": "too_far", "days_out": nr["days_out"], "name": nr["name"]}
+    coords = VENUE_COORDS.get(nr["name"])
+    if not coords:
+        return {"status": "no_coords", "name": nr["name"]}
+    import weather
+    fc = weather.fetch_forecast(coords[0], coords[1], nr["date"])
+    if not fc:
+        return {"status": "unavailable", "name": nr["name"]}
+
+    # derive adjustments
+    adj = []
+    hi = fc.get("high_f")
+    if hi is not None:
+        if hi >= 90:
+            adj.append(("Hot race", f"~{hi} F. Expect some power loss; start the first climb a touch conservative and drink early. Push fluids to 24-30 oz/h with extra sodium; pre-cool (ice sock/cold drink) in the staging."))
+        elif hi >= 80:
+            adj.append(("Warm race", f"~{hi} F. Hydrate well ahead; 20-27 oz/h with electrolytes. Fine to race hard if paced."))
+        elif hi <= 55:
+            adj.append(("Cool race", f"~{hi} F. Warm up longer, arm/knee warmers to the line; carbs matter more than fluid."))
+    if fc.get("mud_risk"):
+        adj.append(("Likely mud", f"{fc.get('prior_precip_in',0)} in of rain in the two days prior. Drop tire pressure a few psi for grip, expect slower lap times and higher effort, and scrub/keep the drivetrain clean. Pre-ride the tricky lines."))
+    elif (fc.get("precip_prob") or 0) >= 50:
+        adj.append(("Rain possible", f"{fc.get('precip_prob')}% chance. Pack a rain layer; if it wets the course, ride the mud advice above."))
+    if fc.get("wind_mph") and fc["wind_mph"] >= 15:
+        adj.append(("Windy", f"{fc['wind_mph']} mph from the {fc.get('wind_dir','?')}. Shelter where you can on exposed/open sections and use the anaerobic battery out of the wind, not into it."))
+
+    return {"status": "ok", "name": nr["name"], "date": nr["date"],
+            "days_out": nr["days_out"], "forecast": fc, "adjustments": adj}
+
+
 def next_race(excluded=None):
     excluded = set(excluded or [])
     t = date.today().isoformat()
@@ -1160,8 +1213,9 @@ def main():
     rscore = recovery_score(pmc_series, recovery, models)
     brief = coaching_brief(pmc_series, ready, ftp, ftp_info, tiz, recovery, excluded)
     fuel = fueling(weight, pmc_series)
-    insights = synthesize(pmc_series, models, recovery, ftp, ftp_info, tiz,
-                          next_race(excluded), weight)
+    nr = next_race(excluded)
+    insights = synthesize(pmc_series, models, recovery, ftp, ftp_info, tiz, nr, weight)
+    weather_block = race_weather(nr)
 
     # max HR seen (for HR-zone context)
     max_hr = max((r["max_hr"] for r in rides if r["max_hr"]), default=None)
@@ -1200,6 +1254,7 @@ def main():
         "coaching": brief,
         "models": models,
         "insights": insights,
+        "race_weather": weather_block,
         "fueling": fuel,
         "race_calendar": [{"date": d, "name": n, "series": s} for d, n, s in RACE_CALENDAR],
         "excluded_races": excluded,

@@ -270,6 +270,30 @@
     else if (dleft <= 10) g.textContent = "Begin the taper: hold intensity, cut volume ~30-40%. Arrive fresh, not fatigued.";
     else g.textContent = "Build phase: this is the window for hard, race-specific work before the taper.";
     s.appendChild(g);
+
+    // race-day weather (only if it matches the current next race)
+    const w = D.race_weather;
+    if (w && w.name === nr.name) {
+      const box = el("div");
+      box.style.cssText = "margin-top:14px;padding:12px 14px;background:#fff;border:1px solid var(--line);border-radius:12px";
+      if (w.status === "ok") {
+        const f = w.forecast;
+        box.innerHTML = `<div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);font-weight:700;margin-bottom:6px">Race-day forecast</div>
+          <div style="font-size:15px;font-weight:700">${f.high_f}&deg;F <span style="color:var(--muted);font-weight:400">/ ${f.low_f}&deg;F</span> &middot; ${f.conditions || ''}</div>
+          <div style="font-size:13px;color:#5a4a55;margin-top:2px">Wind ${f.wind_mph} mph ${f.wind_dir || ''} &middot; ${f.precip_prob ?? 0}% rain${f.mud_risk ? ' &middot; <b style="color:var(--amber)">mud likely</b>' : ''}</div>`;
+        (w.adjustments || []).forEach(([t, txt]) => {
+          const a = el("div");
+          a.style.cssText = "margin-top:9px;font-size:13px;color:#5a4a55;line-height:1.45";
+          a.innerHTML = `<b style="color:var(--accent)">${t}:</b> ${txt}`;
+          box.appendChild(a);
+        });
+      } else if (w.status === "too_far") {
+        box.innerHTML = `<div style="font-size:13px;color:var(--muted)">Race-day forecast unlocks about 16 days out (${w.days_out} days to go). Pacing and fueling will auto-adjust to the weather then.</div>`;
+      } else {
+        box.innerHTML = `<div style="font-size:13px;color:var(--muted)">Race-day forecast not available yet.</div>`;
+      }
+      s.appendChild(box);
+    }
   }
 
   /* ================= power curve ================= */

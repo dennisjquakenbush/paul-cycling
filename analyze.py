@@ -652,7 +652,48 @@ def season_mmp_garmin(rides, durations):
     return out
 
 
-def build_models(rides, rides_raw, weight, daily_series):
+def climbing_power(cp, ftp, weight_kg, bike_kg):
+    """
+    Turn power + weight into real climbing performance. Uphill speed is set by the
+    WHOLE system (rider + bike), so this computes system power-to-weight and, from
+    the physics of climbing, his sustainable vertical rate (VAM) at Critical Power,
+    plus how much each pound off the bike is worth in seconds.
+    """
+    if not weight_kg:
+        return None
+    body = weight_kg
+    system = body + (bike_kg or 0)
+    out = {
+        "body_lb": round(body / 0.453592, 1),
+        "cp_wkg_body": round(cp / body, 2) if cp else None,
+        "ftp_wkg_body": round(ftp / body, 2) if ftp else None,
+    }
+    if not bike_kg:
+        return out
+
+    out["bike_lb"] = round(bike_kg / 0.453592, 1)
+    out["system_lb"] = round(system / 0.453592, 1)
+    out["bike_pct"] = round(bike_kg / system * 100, 1)
+    out["cp_wkg_system"] = round(cp / system, 2) if cp else None
+    out["ftp_wkg_system"] = round(ftp / system, 2) if ftp else None
+
+    if cp:
+        g, crr, grade = 9.81, 0.018, 0.08          # 8% climb, XC dirt rolling resistance
+        theta = math.atan(grade)
+        s, c = math.sin(theta), math.cos(theta)
+        # steady climb (aero negligible at climbing speed): P = m g v (sinθ + Crr cosθ)
+        v = cp / (system * g * (s + crr * c))       # m/s along the slope
+        vam_m = v * s * 3600                          # vertical metres / hour
+        t100 = 30.48 / (v * s)                        # seconds per 100 ft of vertical
+        out["vam_ft_per_h"] = round(vam_m * 3.28084)
+        out["sec_per_100ft"] = round(t100)
+        # climb time is proportional to mass -> seconds saved per lb, per 100 ft climbed
+        out["sec_per_lb_per_100ft"] = round(t100 / system * 0.453592, 2)
+        out["grade_assumed"] = "8%"
+    return out
+
+
+def build_models(rides, rides_raw, weight, daily_series, bike_kg=None, ftp=None):
     # prefer Garmin's own per-ride power curve for the CP fit; fall back to streams
     mmp = season_mmp_garmin(rides, CP_DURATIONS) or season_mmp(rides_raw, CP_DURATIONS)
     total_kj = 0.0
@@ -661,8 +702,11 @@ def build_models(rides, rides_raw, weight, daily_series):
         p = [x for x in (s.get("power") or []) if x]
         if p:
             total_kj += sum(p) * sample_dt(s) / 1000
+    cp_fit = fit_critical_power(mmp, weight)
+    cp_w = cp_fit["cp"] if cp_fit else None
     return {
-        "critical_power": fit_critical_power(mmp, weight),
+        "critical_power": cp_fit,
+        "climbing_power": climbing_power(cp_w, ftp, weight, bike_kg),
         "efficiency_factor": efficiency_factor(rides),
         "variability_index": variability_index(rides),
         "monotony_strain": monotony_strain(daily_series),
@@ -1155,6 +1199,18 @@ def synthesize(pmc_series, models, recovery, ftp, ftp_info, tiz, nr, weight):
                             f"(50 is his own average){' at about ' + str(desc['avg_speed_mph']) + ' mph' if desc.get('avg_speed_mph') else ''}. "
                             f"{desc['note']}{trend_txt} For a rider this fit, descending is usually where the cheap seconds are."})
 
+    # 7.5) Climbing: power + system weight physics
+    clp = m.get("climbing_power")
+    if clp and clp.get("system_lb") and clp.get("vam_ft_per_h"):
+        per800 = round(clp["sec_per_lb_per_100ft"] * 8, 1)   # sec/lb over an 800 ft race climb
+        heavy = clp["bike_lb"] >= 24
+        out.append({"title": "Where power meets weight: climbing", "tone": "info",
+                    "text": f"All-in he's {clp['system_lb']} lb (rider + {clp['bike_lb']} lb bike; the bike is {clp['bike_pct']}% of the system). "
+                            f"At Critical Power that's {clp['cp_wkg_system']} W/kg of system weight, which climbs about {clp['vam_ft_per_h']:,} ft/hr - roughly {clp['sec_per_100ft']}s per 100 ft of climb. "
+                            + (f"His {clp['bike_lb']} lb bike is on the heavier side for XC: every pound off it saves ~{clp['sec_per_lb_per_100ft']}s per 100 ft, so on a race with ~800 ft of climbing a 2 lb lighter bike is worth ~{round(per800*2)}s - real places in a tight field."
+                               if heavy else
+                               f"Every pound off the bike saves ~{clp['sec_per_lb_per_100ft']}s per 100 ft climbed.")})
+
     # 8) Race outlook: TSB + days to race + recovery + CP prediction
     if nr and cp:
         d = nr["days_out"]
@@ -1163,7 +1219,7 @@ def synthesize(pmc_series, models, recovery, ftp, ftp_info, tiz, nr, weight):
                     "text": f"He's carrying fitness of {pmc['ctl']} (CTL) with form at {pmc['tsb']}. With {d} days out there's {window}. "
                             f"The Critical Power model projects he can hold about {cp['predict']['45min']} W for a 45-minute race - build the plan around defending that number on the climbs."})
 
-    return out[:8]
+    return out[:9]
 
 
 def readiness(pmc_series, recovery):
@@ -1268,8 +1324,14 @@ def main():
     weekly = weekly_tss(series)
     config = load_config()
     excluded = config.get("excluded_races", [])
+    # prefer the user-set rider/bike weights (config) over Garmin's stored weight
+    LB = 0.453592
+    if config.get("rider_weight_lb"):
+        weight = round(config["rider_weight_lb"] * LB, 2)
+        profile["weight_kg"] = weight
+    bike_kg = round(config["bike_weight_lb"] * LB, 2) if config.get("bike_weight_lb") else None
     recovery = recovery_block(apple, garmin_well)
-    models = build_models(rides, rides_raw, weight, series)
+    models = build_models(rides, rides_raw, weight, series, bike_kg=bike_kg, ftp=ftp)
     ready = readiness(pmc_series, recovery)
     rscore = recovery_score(pmc_series, recovery, models)
     brief = coaching_brief(pmc_series, ready, ftp, ftp_info, tiz, recovery, excluded)

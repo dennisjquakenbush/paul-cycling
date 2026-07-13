@@ -3,5 +3,7 @@
     "2026-08-02|Griffin Bike Park"
   ],
   "apple_health_icloud_dir": "/Users/dennisquakenbush/Documents/Paulhealth/paulhealth",
-  "publish_to_github": true
+  "publish_to_github": true,
+  "rider_weight_lb": 126.6,
+  "bike_weight_lb": 24.7
 }

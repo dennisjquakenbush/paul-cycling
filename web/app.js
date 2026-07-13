@@ -60,6 +60,9 @@
     heat: "Average of each ride's high temperature over the last 30 days. Training in the heat builds tolerance that pays off on a hot race day.",
     climb: "Total vertical climbing this season, in feet - a measure of how much elevation work he's put in.",
     cadence: "Average pedaling cadence (revolutions per minute) across his rides.",
+    wkgsys: "Power-to-weight using the WHOLE system (rider + bike), not just his body. This is the number that actually sets how fast he climbs - a heavier bike lowers it. Watts of Critical Power per kg of rider+bike.",
+    vam: "How fast he gains elevation (feet per hour) at Critical Power on a typical 8% climb - derived from the physics of power vs system weight. The real measure of climbing speed.",
+    syswt: "Total weight that has to go up the hill: his body plus the bike. Climbing speed depends on this, which is why bike weight matters.",
   };
   // shared bottom toast for phone tooltips (never clips off-screen)
   let toastEl = null;
@@ -389,6 +392,10 @@
       g.appendChild(stat(`${cp.cp}<small> W</small>`, "Critical Power", "cp"));
       g.appendChild(stat(`${cp.w_prime_kj}<small> kJ</small>`, "W' (anaerobic battery)", "wprime"));
     }
+    const clp = m.climbing_power;
+    if (clp && clp.cp_wkg_system) g.appendChild(stat(`${clp.cp_wkg_system}<small> W/kg</small>`, "Power-to-weight (system)", "wkgsys"));
+    if (clp && clp.vam_ft_per_h) g.appendChild(stat(`${(clp.vam_ft_per_h / 1000).toFixed(1)}k<small> ft/hr</small>`, "Climb rate at CP", "vam"));
+    if (clp && clp.system_lb) g.appendChild(stat(`${clp.system_lb}<small> lb</small>`, "System weight (rider+bike)", "syswt"));
     const ef = m.efficiency_factor;
     if (ef && ef.latest) {
       const tr = ef.trend_pct == null ? "" : ` <small style="color:${ef.trend_pct >= 0 ? 'var(--green)' : 'var(--amber)'}">${ef.trend_pct > 0 ? '+' : ''}${ef.trend_pct}%</small>`;
